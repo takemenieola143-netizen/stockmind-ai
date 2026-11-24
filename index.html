@@ -2,392 +2,356 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StockMind AI 2.0</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StockMind AI Pro</title>
 <style>
 *{box-sizing:border-box}
-body{background:#0b1220;color:#e2e8f0;font-family:system-ui;margin:0;padding:16px}
-h1{color:#34d399;margin-bottom:4px}
-h2,h3{margin-top:8px}
-p,small{color:#94a3b8}
-.card{background:#162235;border:1px solid #29384d;border-radius:16px;padding:16px;margin:14px 0}
-button,input,select{font:inherit;padding:12px;border-radius:9px;border:1px solid #334155;margin:5px 0;width:100%}
-button{background:#34d399;color:#052e25;font-weight:bold;cursor:pointer}
-input,select{background:#0b1220;color:white}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.tabs button{background:#22334a;color:white}
+body{background:#0b1220;color:#e2e8f0;font:16px system-ui;margin:auto;padding:16px;max-width:1000px}
+h1{color:#34d399}
+section{background:#162235;padding:16px;border-radius:14px;margin:14px 0}
+input,select,button{font:inherit;padding:12px;border:1px solid #475569;border-radius:8px;background:#0b1220;color:white;width:100%;margin:5px 0}
+button{background:#34d399;color:#052e25;font-weight:bold}
+small,p{color:#aab8cb}
+article{border-bottom:1px solid #475569;padding:12px 0}
+summary{cursor:pointer}
+svg{width:100%;height:100px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .green{color:#34d399}
 .red{color:#fb7185}
-.stock{border-bottom:1px solid #334155;padding:14px 0}
-.stockhead{display:flex;justify-content:space-between;gap:8px}
-.metric{background:#0b1220;padding:12px;border-radius:12px}
-.metric strong{display:block;font-size:24px;margin-top:6px}
-a{color:#60a5fa}
 </style>
 </head>
 <body>
 
-<h1>StockMind AI</h1>
-<p>Indian Market Intelligence · V2.0</p>
+<h1>StockMind AI Pro</h1>
+<p>Daily Indian equity research</p>
 
-<div class="card">
+<section>
 <small>MARKET DATA STATUS</small>
-<h3 id="status">Connecting to market data...</h3>
+<h3 id="status">Loading snapshot...</h3>
+<button id="refresh">Refresh Market Data</button>
+<p id="breadth"></p>
 <p id="updated"></p>
-<small>Yahoo Finance daily data. Not live prices.</small>
-<button onclick="loadMarket()">Refresh Market Data</button>
-</div>
+<small>Daily historical data. Not live prices.</small>
+</section>
 
-<div class="card">
-<h3>Market Overview</h3>
-<div class="grid">
-<div class="metric">
-<small>Stocks scanned</small>
-<strong id="total">--</strong>
-</div>
-<div class="metric">
-<small>Advancing</small>
-<strong class="green" id="up">--</strong>
-</div>
-<div class="metric">
-<small>Declining</small>
-<strong class="red" id="down">--</strong>
-</div>
-<div class="metric">
-<small>Unchanged</small>
-<strong id="flat">--</strong>
-</div>
-</div>
-</div>
+<section>
+<h2>Research Scanner</h2>
+<input id="search" placeholder="Search stock symbol">
 
-<div class="card">
-<h3 class="green">Top Gainers</h3>
-<div id="gainers">Waiting for data</div>
-</div>
+<select id="mode">
+<option value="all">All stocks</option>
+<option value="5">Penny stocks below ₹5</option>
+<option value="10">Penny stocks below ₹10</option>
+<option value="20">Penny stocks below ₹20</option>
+<option value="swing">Swing momentum</option>
+<option value="long">Long-term technical trend</option>
+</select>
 
-<div class="card">
-<h3 class="red">Top Losers</h3>
-<div id="losers">Waiting for data</div>
-</div>
-
-<div class="card">
-<h3>Market Scanner</h3>
-<div class="grid tabs">
-<button onclick="mode('Intraday')">Intraday</button>
-<button onclick="mode('Swing')">Swing</button>
-<button onclick="mode('Penny')">Penny Stocks</button>
-<button onclick="mode('Long-term')">Long-term</button>
-</div>
-
-<h3 id="strategy">All Stocks</h3>
-<p id="strategyNote">Browse available daily stock data.</p>
-
-<input id="search" placeholder="Search stock symbol" oninput="scan()">
-
-<label>Maximum price (₹)</label>
-<input id="maxPrice" type="number" value="100000" min="0">
-
-<label>Minimum volume</label>
-<input id="minVolume" type="number" value="10000" min="0">
-
-<label>Sort results by</label>
-<select id="sort" onchange="scan()">
+<select id="sort">
+<option value="score">Highest technical score</option>
+<option value="gain">Top gainers</option>
+<option value="loss">Top losers</option>
+<option value="fall">Largest historical decline</option>
 <option value="volume">Highest volume</option>
-<option value="gain">Highest gain</option>
-<option value="loss">Highest loss</option>
 <option value="price">Lowest price</option>
 </select>
 
-<button onclick="scan()">Run Market Scan</button>
-<div id="results">Waiting for market data...</div>
-</div>
+<div id="results"></div>
+</section>
 
-<div class="card">
-<h3>Paper Trading</h3>
-<small>Virtual cash balance</small>
-<h1 id="balance"></h1>
-
+<section>
+<h2>Paper Trading</h2>
+<p id="wallet"></p>
 <input id="symbol" placeholder="Stock symbol">
-<input id="price" type="number" placeholder="Execution price ₹">
-<input id="qty" type="number" placeholder="Quantity">
+<input id="qty" type="number" min="1" placeholder="Number of shares">
 
 <div class="grid">
-<button onclick="trade('BUY')">Virtual Buy</button>
-<button onclick="trade('SELL')">Virtual Sell</button>
+<button id="buy">Virtual Buy</button>
+<button id="sell">Virtual Sell</button>
 </div>
 
 <h3>Portfolio Holdings</h3>
-<div id="positions"></div>
-
+<p id="holdings"></p>
 <h3>Trade History</h3>
-<div id="history"></div>
-<small>Simulated executions. Brokerage, taxes and slippage are excluded.</small>
-</div>
+<p id="trades"></p>
+<small>Simulated trades using available closing prices. No fees or slippage.</small>
+</section>
 
-<div class="card">
-<h3>Research Engine</h3>
-<p>Automatic daily data collection enabled.</p>
-<p>Upcoming: RSI, MACD, moving averages, fundamental analysis, news intelligence and backtesting.</p>
-</div>
-
-<small>Educational research only. No real orders are placed. Market data may be delayed or incomplete.</small>
+<section>
+<h2>Research Engine</h2>
+<p>Technical scoring uses four equally weighted rules:</p>
+<p>
+Price above SMA50: 25 points<br>
+Price above SMA200: 25 points<br>
+MACD above signal: 25 points<br>
+RSI between 50 and 70: 25 points
+</p>
+<small>Scores are not probabilities of profit. Targets and stops are hypothetical. Backtests use prior-day signals and close-to-close returns without fees. Historical highs use available adjusted history. Fundamentals, news sentiment and live intraday data are not connected.</small>
+</section>
 
 <script>
-const DATA_URL =
-"https://raw.githubusercontent.com/takemenieola143-netizen/stockmind-ai/main/market_data.csv";
+const $=x=>document.getElementById(x);
 
-const $ = id => document.getElementById(id);
+const money=x=>'₹'+Number(x).toLocaleString(
+'en-IN',{maximumFractionDigits:2}
+);
 
-let stocks = [];
-let wallet;
-
-try {
-wallet = JSON.parse(localStorage.getItem("stockmind")) ||
-{cash:100000,positions:{},history:[]};
-} catch(e) {
-wallet = {cash:100000,positions:{},history:[]};
-}
-
-function money(n){
-return "₹"+n.toLocaleString("en-IN",{
-minimumFractionDigits:2,
-maximumFractionDigits:2
-});
-}
-
-async function loadMarket(){
-$("status").textContent="Fetching market data...";
-$("updated").textContent="";
+let stocks=[];
+let w;
 
 try{
-const response=await fetch(DATA_URL+"?t="+Date.now(),{
-cache:"no-store"
-});
-
-if(!response.ok){
-throw new Error("HTTP "+response.status);
+w=JSON.parse(localStorage.getItem('stockmind'))||
+{cash:100000,positions:{},history:[]};
+}catch{
+w={cash:100000,positions:{},history:[]};
 }
 
-const csv=await response.text();
-const rows=csv.trim().split(/\r?\n/);
-const header=rows.shift().trim().toLowerCase();
+async function load(){
+$('status').textContent='Loading market analysis...';
 
-if(header!=="symbol,price,volume,change"){
-throw new Error("Unexpected data format");
-}
-
-const fresh=rows.map(row=>{
-const a=row.split(",");
-return {
-symbol:a[0].trim(),
-price:Number(a[1]),
-volume:Number(a[2]),
-change:Number(a[3])
-};
-}).filter(s=>
-s.symbol &&
-Number.isFinite(s.price) &&
-s.price>0 &&
-Number.isFinite(s.volume) &&
-s.volume>=0 &&
-Number.isFinite(s.change)
+try{
+const r=await fetch(
+'https://raw.githubusercontent.com/takemenieola143-netizen/stockmind-ai/main/market_data.json?t='+Date.now(),
+{cache:'no-store'}
 );
 
-if(!fresh.length){
-throw new Error("No valid stock records");
+if(!r.ok)throw Error('HTTP '+r.status);
+
+const d=await r.json();
+
+if(!Array.isArray(d.stocks)||!d.stocks.length){
+throw Error('No stock data available');
 }
 
-stocks=fresh;
+stocks=d.stocks;
 
-$("status").textContent="Connected · "+stocks.length+" stocks";
-$("updated").textContent=
-"Retrieved: "+new Date().toLocaleString("en-IN")+
-". Trading session date unavailable.";
+$('status').textContent=
+stocks.length+'/'+d.requested+' stocks connected';
 
-overview();
-scan();
+$('updated').textContent=
+'Generated: '+d.generated+
+' | Unavailable stocks: '+d.failed.length;
 
-}catch(error){
-$("status").textContent="Data connection failed";
-$("updated").textContent=
-error.message+". Existing results, if any, may be stale.";
+$('breadth').textContent=
+stocks.filter(s=>s.change>0).length+' advancing | '+
+stocks.filter(s=>s.change<0).length+' declining | '+
+stocks.filter(s=>s.change===0).length+' unchanged';
+
+render();
+wallet();
+
+}catch(e){
+$('status').textContent=
+'Snapshot unavailable: '+e.message;
+
+$('updated').textContent=
+'Existing results, if any, may be stale.';
 }
-}
-
-function stockRow(s,parent){
-const row=document.createElement("div");
-row.className="stock";
-
-const head=document.createElement("div");
-head.className="stockhead";
-
-const name=document.createElement("strong");
-name.textContent=s.symbol;
-
-const change=document.createElement("strong");
-change.className=s.change>=0?"green":"red";
-change.textContent=(s.change>0?"+":"")+s.change.toFixed(2)+"%";
-
-head.append(name,change);
-
-const details=document.createElement("p");
-details.textContent=money(s.price)+
-" · Volume: "+s.volume.toLocaleString("en-IN");
-
-const button=document.createElement("button");
-button.textContent="Paper Trade";
-button.onclick=()=>{
-$("symbol").value=s.symbol;
-$("price").value=s.price;
-$("qty").focus();
-};
-
-row.append(head,details,button);
-parent.append(row);
-}
-
-function overview(){
-$("total").textContent=stocks.length;
-$("up").textContent=stocks.filter(s=>s.change>0).length;
-$("down").textContent=stocks.filter(s=>s.change<0).length;
-$("flat").textContent=stocks.filter(s=>s.change===0).length;
-
-const sorted=[...stocks].sort((a,b)=>b.change-a.change);
-
-$("gainers").replaceChildren();
-$("losers").replaceChildren();
-
-const gainers=sorted.filter(s=>s.change>0).slice(0,3);
-const losers=[...sorted].reverse().filter(s=>s.change<0).slice(0,3);
-
-gainers.forEach(s=>stockRow(s,$("gainers")));
-losers.forEach(s=>stockRow(s,$("losers")));
-
-if(!gainers.length)$("gainers").textContent="No gainers";
-if(!losers.length)$("losers").textContent="No losers";
-}
-
-function mode(m){
-$("strategy").textContent=m+" Scanner";
-$("maxPrice").value=m==="Penny"?10:100000;
-
-const notes={
-"Intraday":"Daily data only. Live intraday strategy not available.",
-"Swing":"Daily momentum screening. Technical signals not yet implemented.",
-"Penny":"Price filter below or equal to ₹10. Low price does not mean undervalued.",
-"Long-term":"Stock browsing only. Fundamental analysis not yet connected."
-};
-
-$("strategyNote").textContent=notes[m];
-$("sort").value=m==="Swing"?"gain":"volume";
-scan();
-}
-
-function scan(){
-const result=$("results");
-result.replaceChildren();
-
-const max=Number($("maxPrice").value);
-const min=Number($("minVolume").value);
-const q=$("search").value.toUpperCase().trim();
-
-let filtered=stocks.filter(s=>
-s.price<=max &&
-s.volume>=min &&
-s.symbol.toUpperCase().includes(q)
-);
-
-const sort=$("sort").value;
-
-filtered.sort((a,b)=>{
-if(sort==="gain")return b.change-a.change;
-if(sort==="loss")return a.change-b.change;
-if(sort==="price")return a.price-b.price;
-return b.volume-a.volume;
-});
-
-const note=document.createElement("p");
-note.textContent=filtered.length+
-" matches from "+stocks.length+" tracked stocks.";
-result.append(note);
-
-filtered.slice(0,100).forEach(s=>stockRow(s,result));
 }
 
 function render(){
-$("balance").textContent=money(wallet.cash);
 
-$("positions").replaceChildren();
-$("history").replaceChildren();
+let a=stocks.filter(s=>
+s.symbol.includes(
+$('search').value.trim().toUpperCase()
+));
 
-const holdings=Object.entries(wallet.positions)
+let m=$('mode').value;
+
+if(+m)a=a.filter(s=>s.price<=+m);
+
+if(m==='swing')
+a=a.filter(s=>s.score>=75);
+
+if(m==='long')
+a=a.filter(s=>s.price>s.sma200);
+
+let k=$('sort').value;
+
+a.sort((x,y)=>
+k==='gain'?y.change-x.change:
+k==='loss'?x.change-y.change:
+k==='fall'?x.drawdown-y.drawdown:
+k==='price'?x.price-y.price:
+y[k]-x[k]
+);
+
+let root=$('results');
+
+root.replaceChildren();
+
+root.append(document.createTextNode(
+a.length+' matches (first 100 shown)'
+));
+
+for(const s of a.slice(0,100)){
+
+let el=document.createElement('article');
+
+let details=document.createElement('details');
+
+let head=document.createElement('summary');
+
+head.textContent=
+s.symbol+' | '+money(s.price)+
+' | '+s.change+'% | Score '+s.score+'/100';
+
+head.className=s.change>=0?'green':'red';
+
+details.append(head);
+
+let fields=[
+['Trading session',s.date],
+['Volume',s.volume],
+['RSI',s.rsi],
+['MACD',s.macd],
+['MACD signal',s.signal],
+['SMA 20',money(s.sma20)],
+['SMA 50',money(s.sma50)],
+['SMA 200',money(s.sma200)],
+['EMA 20',money(s.ema20)],
+['Bollinger upper',money(s.upper)],
+['Bollinger lower',money(s.lower)],
+['Historical high',money(s.high)],
+['Historical low',money(s.low)],
+['Decline from high',s.drawdown+'%'],
+['Hypothetical stop',money(s.stop)],
+['Hypothetical target',money(s.target)],
+['Illustrative backtest',s.backtest+'%']
+];
+
+for(const [label,value] of fields){
+let p=document.createElement('p');
+p.textContent=label+': '+value;
+details.append(p);
+}
+
+let caption=document.createElement('small');
+caption.textContent='Last 90 trading sessions';
+details.append(caption);
+
+let svg=document.createElementNS(
+'http://www.w3.org/2000/svg','svg'
+);
+
+svg.setAttribute('viewBox','0 0 300 100');
+
+let line=document.createElementNS(
+svg.namespaceURI,'polyline'
+);
+
+let lo=Math.min(...s.history);
+let hi=Math.max(...s.history);
+
+line.setAttribute('points',
+s.history.map((v,i)=>
+`${i*300/Math.max(1,s.history.length-1)},${95-90*(v-lo)/(hi-lo||1)}`
+).join(' ')
+);
+
+line.setAttribute('fill','none');
+line.setAttribute('stroke','#34d399');
+line.setAttribute('stroke-width','2');
+
+svg.append(line);
+details.append(svg);
+
+let b=document.createElement('button');
+
+b.textContent='Select for Paper Trade';
+
+b.onclick=()=>{
+$('symbol').value=s.symbol;
+$('qty').focus();
+};
+
+details.append(b);
+el.append(details);
+root.append(el);
+}
+}
+
+function wallet(){
+
+let entries=Object.entries(w.positions)
 .filter(([s,q])=>q>0);
 
-holdings.forEach(([s,q])=>{
-const p=document.createElement("p");
-p.textContent=s+" · "+q+" shares";
-$("positions").append(p);
-});
+let value=w.cash;
+let missing=0;
 
-if(!holdings.length){
-$("positions").textContent="No virtual holdings";
+for(let [s,q] of entries){
+let x=stocks.find(t=>t.symbol===s);
+if(x)value+=x.price*q;
+else missing++;
 }
 
-wallet.history.slice(-20).reverse().forEach(t=>{
-const p=document.createElement("p");
-p.textContent=t;
-$("history").append(p);
-});
+$('wallet').textContent=
+'Cash: '+money(w.cash)+
+' | Portfolio value: '+money(value)+
+(missing?' (excludes unpriced holdings)':'');
+
+$('holdings').textContent=
+entries.map(([s,q])=>s+': '+q)
+.join(' | ')||'No holdings';
+
+$('trades').textContent=
+w.history.slice(-10).reverse()
+.join(' | ')||'No trades';
 }
 
-function trade(side){
-const s=$("symbol").value.trim().toUpperCase();
-const p=Number($("price").value);
-const q=Number($("qty").value);
+function trade(b){
 
-if(!/^[A-Z0-9&.-]{1,30}$/.test(s)||
-!Number.isFinite(p)||p<=0||
-!Number.isSafeInteger(q)||q<=0){
-alert("Enter valid trade details");
-return;
+let s=stocks.find(x=>
+x.symbol===$('symbol').value.trim().toUpperCase()
+);
+
+let q=Number($('qty').value);
+
+if(!s||!Number.isSafeInteger(q)||q<1){
+return alert('Choose a valid stock and quantity');
 }
 
-const cost=p*q;
-if(!Number.isFinite(cost))return;
+let held=Object.hasOwn(w.positions,s.symbol)?
+w.positions[s.symbol]:0;
 
-const held=Object.hasOwn(wallet.positions,s)?
-wallet.positions[s]:0;
+let c=s.price*q;
 
-if(side==="BUY"){
-if(cost>wallet.cash){
-alert("Insufficient virtual cash");
-return;
-}
-wallet.cash-=cost;
-wallet.positions[s]=held+q;
-}else{
-if(held<q){
-alert("Insufficient virtual shares");
-return;
-}
-wallet.cash+=cost;
-wallet.positions[s]=held-q;
+if(!Number.isFinite(c)){
+return alert('Invalid trade value');
 }
 
-wallet.history.push(side+" "+q+" "+s+" @ "+money(p));
+if(b?c>w.cash:q>held){
+return alert('Insufficient cash or shares');
+}
+
+w.cash+=b?-c:c;
+w.positions[s.symbol]=held+(b?q:-q);
+
+w.history.push(
+`${b?'BUY':'SELL'} ${q} ${s.symbol} @ ${s.price} (${s.date})`
+);
 
 try{
-localStorage.setItem("stockmind",JSON.stringify(wallet));
-}catch(e){
-alert("Browser storage unavailable. Trade may not persist.");
+localStorage.setItem(
+'stockmind',JSON.stringify(w)
+);
+}catch{
+alert('Browser storage unavailable');
 }
 
-render();
+wallet();
 }
 
-render();
-loadMarket();
+$('refresh').onclick=load;
+$('search').oninput=render;
+$('mode').onchange=render;
+$('sort').onchange=render;
+$('buy').onclick=()=>trade(true);
+$('sell').onclick=()=>trade(false);
+
+wallet();
+load();
 </script>
 </body>
 </html>
