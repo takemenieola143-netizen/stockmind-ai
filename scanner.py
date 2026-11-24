@@ -1,149 +1,307 @@
-
-import json, datetime, time
+import json
+import time
+import datetime
+import os
 import pandas as pd
 import yfinance as yf
 from pathlib import Path
 
-# Starter universe; optionally supply symbols.csv
-symbols = 'RELIANCE TCS INFY HDFCBANK SBIN ITC LT AXISBANK ICICIBANK WIPRO ONGC NTPC POWERGRID TATAMOTORS TATASTEEL COALINDIA BEL IRFC YESBANK IDEA SUZLON NHPC'.split()
+# StockMind AI 4.0
+# Daily historical research engine
 
-if Path('symbols.csv').exists():
-    symbols = pd.read_csv('symbols.csv')['symbol'].dropna().astype(str).unique().tolist()
+STARTER = """
+RELIANCE TCS INFY HDFCBANK SBIN
+ITC LT AXISBANK ICICIBANK WIPRO
+TATAMOTORS TATASTEEL ONGC NTPC
+POWERGRID IRFC RVNL YESBANK
+IDEA SUZLON NHPC BHEL
+""".split()
+
+def get_symbols():
+    url = (
+        "https://archives.nseindia.com/"
+        "content/equities/EQUITY_L.csv"
+    )
+
+    try:
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        df = df[df["SERIES"].str.strip() == "EQ"]
+        return sorted(set(df["SYMBOL"].str.strip())), "NSE"
+    except Exception as e:
+        print("NSE list unavailable:", e)
+
+    if Path("symbols.csv").exists():
+        df = pd.read_csv("symbols.csv")
+        df.columns = df.columns.str.strip().str.lower()
+        return sorted(set(df["symbol"].dropna().astype(str).str.strip())), "Local list"
+
+    return STARTER, "Starter list"
+
+
+def number(value, digits=2):
+    try:
+        value = float(value)
+        if pd.isna(value) or abs(value) == float("inf"):
+            return None
+        return round(value, digits)
+    except Exception:
+        return None
+
+
+def analyse(symbol, df):
+    df = df.dropna(subset=["Close"]).sort_index()
+
+    if len(df) < 60:
+        raise ValueError("Insufficient history")
+
+    close = df["Close"]
+    high = df["High"]
+    low = df["Low"]
+    volume = df["Volume"]
+
+    price = float(close.iloc[-1])
+
+    if price <= 0:
+        raise ValueError("Invalid price")
+
+    change = (
+        price / close.iloc[-2] - 1
+    ) * 100
+
+    sma20 = close.rolling(20).mean()
+    sma50 = close.rolling(50).mean()
+    sma200 = close.rolling(200).mean()
+
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.ewm(
+        alpha=1/14,
+        adjust=False,
+        min_periods=14
+    ).mean()
+
+    avg_loss = loss.ewm(
+        alpha=1/14,
+        adjust=False,
+        min_periods=14
+    ).mean()
+
+    rsi = 100 - 100 / (
+        1 + avg_gain / avg_loss
+    )
+
+    ema12 = close.ewm(
+        span=12, adjust=False
+    ).mean()
+
+    ema26 = close.ewm(
+        span=26, adjust=False
+    ).mean()
+
+    macd = ema12 - ema26
+
+    signal = macd.ewm(
+        span=9, adjust=False
+    ).mean()
+
+    previous = close.shift(1)
+
+    tr = pd.concat([
+        high - low,
+        (high - previous).abs(),
+        (low - previous).abs()
+    ], axis=1).max(axis=1)
+
+    atr = tr.rolling(14).mean().iloc[-1]
+
+    average_volume = volume.shift(1).rolling(20).mean().iloc[-1]
+
+    relative_volume = (
+        volume.iloc[-1] / average_volume
+        if average_volume > 0 else None
+    )
+
+    ath = high.max()
+    atl = low.min()
+
+    score = 0
+    reasons = []
+
+    if price > sma20.iloc[-1]:
+        score += 20
+        reasons.append("Above 20-day average")
+
+    if price > sma50.iloc[-1]:
+        score += 20
+        reasons.append("Above 50-day average")
+
+    if price > sma200.iloc[-1]:
+        score += 20
+        reasons.append("Above 200-day average")
+
+    if 45 <= rsi.iloc[-1] <= 65:
+        score += 20
+        reasons.append("RSI between 45 and 65")
+
+    if macd.iloc[-1] > signal.iloc[-1]:
+        score += 20
+        reasons.append("Positive MACD crossover state")
+
+    # Historical strategy test
+    # Signal at close, execution next open
+    position = (
+        sma20 > sma50
+    ).astype(float).shift(1).fillna(0)
+
+    opens = df["Open"]
+    returns = opens.pct_change()
+
+    exposure = position.shift(1).fillna(0)
+    turnover = position.diff().abs().shift(1).fillna(0)
+
+    strategy = (
+        exposure * returns - turnover * 0.002
+    ).dropna().tail(252)
+
+    equity = (1 + strategy).cumprod()
+
+    drawdown = (
+        equity / equity.cummax().clip(lower=1) - 1
+    ).min()
+
+    backtest = (
+        equity.iloc[-1] - 1
+    ) * 100 if len(equity) else None
+
+    benchmark = (
+        (1 + returns.dropna().tail(252)).prod() - 1
+    ) * 100
+
+    return {
+        "symbol": symbol,
+        "date": str(df.index[-1].date()),
+        "price": number(price),
+        "change": number(change),
+        "volume": number(volume.iloc[-1], 0),
+        "relative_volume": number(relative_volume),
+        "rsi": number(rsi.iloc[-1]),
+        "macd": number(macd.iloc[-1]),
+        "macd_signal": number(signal.iloc[-1]),
+        "sma20": number(sma20.iloc[-1]),
+        "sma50": number(sma50.iloc[-1]),
+        "sma200": number(sma200.iloc[-1]),
+        "ath": number(ath),
+        "atl": number(atl),
+        "history_start": str(df.index[0].date()),
+        "fall_from_high": number(
+            (1 - price / ath) * 100
+        ),
+        "score": score,
+        "reasons": reasons,
+        "reference_entry": number(price),
+        "reference_stop": number(
+            max(0, price - 2 * atr)
+        ),
+        "reference_target": number(
+            price + 4 * atr
+        ),
+        "backtest_return": number(backtest),
+        "benchmark_return": number(benchmark),
+        "max_drawdown": number(drawdown * 100),
+        "backtest_days": len(strategy)
+    }
+
+
+symbols, universe_source = get_symbols()
+
+limit = int(os.getenv("MAX_SYMBOLS", "0"))
+
+if limit > 0:
+    symbols = symbols[:limit]
 
 results = []
 failed = []
 
-for start in range(0, len(symbols), 50):
-    batch = symbols[start:start+50]
-    tickers = [s+'.NS' for s in batch]
+for start in range(0, len(symbols), 30):
+
+    batch = symbols[start:start + 30]
+    tickers = [s + ".NS" for s in batch]
+
+    print("Scanning", start, "of", len(symbols))
 
     try:
         data = yf.download(
             tickers,
-            period='max',
-            auto_adjust=True,
-            group_by='ticker',
+            period="max",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=False,
             threads=4,
-            progress=False
+            progress=False,
+            timeout=30
         )
-    except Exception:
+
+        for symbol in batch:
+            try:
+                ticker = symbol + ".NS"
+
+                if isinstance(data.columns, pd.MultiIndex):
+                    df = data[ticker].copy()
+                else:
+                    if len(batch) != 1:
+                        raise ValueError("Unexpected data format")
+                    df = data.copy()
+
+                results.append(analyse(symbol, df))
+
+            except Exception as e:
+                failed.append(symbol)
+                print(symbol, str(e))
+
+    except Exception as e:
         failed.extend(batch)
-        continue
+        print("Batch failed:", e)
 
-    for s, t in zip(batch, tickers):
-        try:
-            d = data[t].dropna(subset=['Close','Volume'])
-            c = d.Close
-            v = d.Volume
+    time.sleep(3)
 
-            if len(c) < 201:
-                raise ValueError('insufficient history')
-
-            delta = c.diff()
-
-            gain = delta.clip(lower=0).ewm(
-                alpha=1/14,
-                adjust=False,
-                min_periods=14
-            ).mean()
-
-            loss = (-delta.clip(upper=0)).ewm(
-                alpha=1/14,
-                adjust=False,
-                min_periods=14
-            ).mean()
-
-            rsi = (100-100/(1+gain/loss)).fillna(50)
-
-            ma20 = c.rolling(20).mean()
-            ma50 = c.rolling(50).mean()
-            ma200 = c.rolling(200).mean()
-
-            macd = (
-                c.ewm(span=12,adjust=False).mean()
-                - c.ewm(span=26,adjust=False).mean()
-            )
-
-            signal = macd.ewm(
-                span=9,
-                adjust=False
-            ).mean()
-
-            sd = c.rolling(20).std()
-            p = float(c.iloc[-1])
-
-            atr = pd.concat([
-                d.High-d.Low,
-                (d.High-c.shift()).abs(),
-                (d.Low-c.shift()).abs()
-            ],axis=1).max(axis=1).rolling(14).mean().iloc[-1]
-
-            score = (
-                25*int(p>ma50.iloc[-1])
-                +25*int(p>ma200.iloc[-1])
-                +25*int(macd.iloc[-1]>signal.iloc[-1])
-                +25*int(50<=rsi.iloc[-1]<=70)
-            )
-
-            position = (c>ma200).shift(1).fillna(False)
-            ret = c.pct_change().fillna(0)
-
-            test = (
-                (1+ret*position).iloc[-252:].prod()-1
-            )
-
-            results.append(dict(
-                symbol=s,
-                price=round(p,2),
-                volume=int(v.iloc[-1]),
-                change=round((p/c.iloc[-2]-1)*100,2),
-                date=str(d.index[-1].date()),
-                rsi=round(float(rsi.iloc[-1]),2),
-                macd=round(float(macd.iloc[-1]),3),
-                signal=round(float(signal.iloc[-1]),3),
-                sma20=round(float(ma20.iloc[-1]),2),
-                sma50=round(float(ma50.iloc[-1]),2),
-                sma200=round(float(ma200.iloc[-1]),2),
-                ema20=round(float(c.ewm(
-                    span=20,
-                    adjust=False
-                ).mean().iloc[-1]),2),
-                upper=round(float((ma20+2*sd).iloc[-1]),2),
-                lower=round(float((ma20-2*sd).iloc[-1]),2),
-                high=round(float(d.High.max()),2),
-                low=round(float(d.Low.min()),2),
-                drawdown=round((p/d.High.max()-1)*100,2),
-                score=score,
-                stop=round(max(0,p-2*atr),2),
-                target=round(p+4*atr,2),
-                backtest=round(float(test)*100,2),
-                history=[
-                    round(float(x),2)
-                    for x in c.tail(90)
-                ]
-            ))
-
-        except Exception as e:
-            failed.append(s)
-            print(s,e)
-
-    time.sleep(2)
 
 if not results:
     raise RuntimeError(
-        'No usable market data; previous snapshot preserved'
+        "No data retrieved. Previous results preserved."
     )
 
-Path('market_data.json').write_text(
-    json.dumps(
-        dict(
-            generated=datetime.datetime.now(
-                datetime.timezone.utc
-            ).isoformat(),
-            requested=len(symbols),
-            failed=failed,
-            stocks=results
-        ),
-        allow_nan=False
-    )
+results.sort(
+    key=lambda x: x["score"],
+    reverse=True
 )
+
+report = {
+    "version": "4.0",
+    "generated": datetime.datetime.now(
+        datetime.timezone.utc
+    ).isoformat(),
+    "source": "Yahoo Finance daily historical data",
+    "universe_source": universe_source,
+    "requested": len(symbols),
+    "connected": len(results),
+    "failed": failed,
+    "stocks": results
+}
+
+Path("market_data.json").write_text(
+    json.dumps(report, indent=2, allow_nan=False),
+    encoding="utf-8"
+)
+
+pd.DataFrame(results).to_csv(
+    "market_data.csv",
+    index=False
+)
+
+print("Requested:", len(symbols))
+print("Successful:", len(results))
+print("Failed:", len(failed))
+print("StockMind AI 4.0 scan completed")
