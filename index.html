@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockMind AI</title>
+<style>
+*{box-sizing:border-box}
+body{background:#0b1220;color:#e2e8f0;font-family:system-ui;margin:0;padding:18px}
+h1{color:#34d399;margin-bottom:4px}
+p{color:#94a3b8}
+.card{background:#162235;border:1px solid #29384d;border-radius:16px;padding:16px;margin:14px 0}
+button,input,select{font:inherit;padding:12px;border-radius:9px;border:1px solid #334155;margin:5px 0;width:100%}
+button{background:#34d399;color:#052e25;font-weight:bold;cursor:pointer}
+input,select{background:#0b1220;color:white}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tabs button{background:#22334a;color:white}
+small{color:#94a3b8}
+.green{color:#34d399}
+.red{color:#fb7185}
+.stock{border-bottom:1px solid #334155;padding:12px 0}
+</style>
+</head>
+<body>
+<h1>StockMind AI</h1>
+<p>Indian Stock Market Intelligence</p>
+<div class="card">
+<small>DATA STATUS</small>
+<h3 id="status">Awaiting market data</h3>
+<small>Version 1.0 · Research and paper trading</small>
+</div>
+<div class="card">
+<h3>Market Scanner</h3>
+<div class="tabs">
+<button onclick="mode('Intraday')">Intraday</button>
+<button onclick="mode('Swing')">Swing</button>
+<button onclick="mode('Penny')">Penny Stocks</button>
+<button onclick="mode('Long-term')">Long-term</button>
+</div>
+<h3 id="strategy">Penny Scanner</h3>
+<input id="search" placeholder="Search stock symbol" oninput="scan()">
+<label>Maximum stock price (₹)</label>
+<input id="maxPrice" type="number" value="10" min="0">
+<label>Minimum trading volume</label>
+<input id="minVolume" type="number" value="10000" min="0">
+<p>Import a CSV file with columns: symbol,price,volume,change</p>
+<input type="file" accept=".csv" onchange="loadCSV(event)">
+<button onclick="scan()">Run Market Scan</button>
+<div id="results">No market data loaded.</div>
+</div>
+<div class="card">
+<h3>Paper Trading</h3>
+<small>Virtual cash balance</small>
+<h1 id="balance"></h1>
+<input id="symbol" placeholder="Stock symbol">
+<input id="price" type="number" placeholder="Execution price ₹">
+<input id="qty" type="number" placeholder="Quantity">
+<button onclick="trade('BUY')">Virtual Buy</button>
+<button onclick="trade('SELL')">Virtual Sell</button>
+<div id="history"></div>
+</div>
+<div class="card">
+<h3>AI Research Engine</h3>
+<p>Planned integrations:</p>
+<p>○ RSI and MACD<br>
+○ Moving averages<br>
+○ Fundamental analysis<br>
+○ News sentiment<br>
+○ Automatic daily scans<br>
+○ Backtesting</p>
+</div>
+<small>Educational research only. No real orders are placed. Imported data may be delayed.</small>
+<script>
+let stocks=[];
+let selected='Penny';
+let wallet;
+try{
+wallet=JSON.parse(localStorage.getItem('stockmind'))||{cash:100000,positions:{},history:[]};
+}catch(e){
+wallet={cash:100000,positions:{},history:[]};
+}
+function mode(m){
+selected=m;
+document.getElementById('strategy').textContent=m+' Scanner';
+document.getElementById('maxPrice').value=m==='Penny'?10:100000;
+scan();
+}
+async function loadCSV(event){
+const file=event.target.files[0];
+if(!file)return;
+const rows=(await file.text()).trim().split(/\r?\n/);
+const header=rows.shift().toLowerCase().replace(/^\uFEFF/,'').split(',').map(x=>x.trim());
+const keys=['symbol','price','volume','change'];
+if(!keys.every(k=>header.includes(k))){
+alert('CSV must contain symbol,price,volume,change');
+return;
+}
+stocks=rows.map(r=>{
+const a=r.split(',');
+return {
+symbol:(a[header.indexOf('symbol')]||'').trim(),
+price:Number(a[header.indexOf('price')]),
+volume:Number(a[header.indexOf('volume')]),
+change:Number(a[header.indexOf('change')])
+};
+}).filter(s=>s.symbol&&s.price>0&&Number.isFinite(s.volume)&&s.volume>=0&&Number.isFinite(s.change));
+document.getElementById('status').textContent=stocks.length+' stocks imported';
+scan();
+}
+function scan(){
+const result=document.getElementById('results');
+result.replaceChildren();
+const max=Number(document.getElementById('maxPrice').value);
+const min=Number(document.getElementById('minVolume').value);
+const q=document.getElementById('search').value.toUpperCase();
+let filtered=stocks.filter(s=>s.price<=max&&s.volume>=min&&s.symbol.toUpperCase().includes(q));
+filtered.sort((a,b)=>b.volume-a.volume);
+const note=document.createElement('p');
+note.textContent=filtered.length+' matches. Ranked by volume, not investment quality.';
+result.append(note);
+filtered.slice(0,100).forEach(s=>{
+const el=document.createElement('div');
+el.className='stock';
+el.textContent=s.symbol+' | ₹'+s.price.toFixed(2)+' | Change: '+s.change+'% | Volume: '+s.volume.toLocaleString('en-IN');
+result.append(el);
+});
+}
+function render(){
+document.getElementById('balance').textContent='₹'+wallet.cash.toLocaleString('en-IN',{maximumFractionDigits:2});
+const h=document.getElementById('history');
+h.replaceChildren();
+wallet.history.slice(-10).reverse().forEach(t=>{
+const p=document.createElement('p');
+p.textContent=t;
+h.append(p);
+});
+}
+function trade(side){
+const s=document.getElementById('symbol').value.trim().toUpperCase();
+const p=Number(document.getElementById('price').value);
+const q=Number(document.getElementById('qty').value);
+if(!/^[A-Z0-9&.-]{1,30}$/.test(s)||!Number.isFinite(p)||p<=0||!Number.isSafeInteger(q)||q<=0){
+alert('Enter a valid symbol, price and quantity');
+return;
+}
+const cost=p*q;
+const held=Object.hasOwn(wallet.positions,s)?wallet.positions[s]:0;
+if(side==='BUY'){
+if(cost>wallet.cash){alert('Insufficient virtual cash');return;}
+wallet.cash-=cost;
+wallet.positions[s]=held+q;
+}else{
+if(held<q){alert('Insufficient virtual shares');return;}
+wallet.cash+=cost;
+wallet.positions[s]=held-q;
+}
+wallet.history.push(side+' '+q+' '+s+' @ ₹'+p);
+localStorage.setItem('stockmind',JSON.stringify(wallet));
+render();
+}
+render();
+</script>
+</body>
+</html>
