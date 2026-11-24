@@ -1,5 +1,4 @@
-
-name: StockMind AI Pro Scanner
+name: StockMind AI 4.0 Scanner
 
 on:
   workflow_dispatch:
@@ -28,18 +27,18 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install yfinance pandas numpy
+        run: pip install pandas numpy yfinance requests
 
-      - name: Run market scanner
+      - name: Run StockMind Scanner
         run: python scanner.py
 
-      - name: Save market analysis
+      - name: Save market data
         run: |
           git config user.name "StockMind Bot"
           git config user.email "stockmind@users.noreply.github.com"
-          git add market_data.json
+          git add -- '*.csv' '*.json'
           if ! git diff --cached --quiet; then
-            git commit -m "Update StockMind market analysis"
+            git commit -m "Update StockMind market data"
             git pull --rebase origin main
             git push origin main
           fi
