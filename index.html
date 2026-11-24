@@ -4,162 +4,390 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StockMind AI</title>
+<title>StockMind AI 2.0</title>
 <style>
 *{box-sizing:border-box}
-body{background:#0b1220;color:#e2e8f0;font-family:system-ui;margin:0;padding:18px}
+body{background:#0b1220;color:#e2e8f0;font-family:system-ui;margin:0;padding:16px}
 h1{color:#34d399;margin-bottom:4px}
-p{color:#94a3b8}
+h2,h3{margin-top:8px}
+p,small{color:#94a3b8}
 .card{background:#162235;border:1px solid #29384d;border-radius:16px;padding:16px;margin:14px 0}
 button,input,select{font:inherit;padding:12px;border-radius:9px;border:1px solid #334155;margin:5px 0;width:100%}
 button{background:#34d399;color:#052e25;font-weight:bold;cursor:pointer}
 input,select{background:#0b1220;color:white}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tabs button{background:#22334a;color:white}
-small{color:#94a3b8}
 .green{color:#34d399}
 .red{color:#fb7185}
-.stock{border-bottom:1px solid #334155;padding:12px 0}
+.stock{border-bottom:1px solid #334155;padding:14px 0}
+.stockhead{display:flex;justify-content:space-between;gap:8px}
+.metric{background:#0b1220;padding:12px;border-radius:12px}
+.metric strong{display:block;font-size:24px;margin-top:6px}
+a{color:#60a5fa}
 </style>
 </head>
 <body>
+
 <h1>StockMind AI</h1>
-<p>Indian Stock Market Intelligence</p>
+<p>Indian Market Intelligence · V2.0</p>
+
 <div class="card">
-<small>DATA STATUS</small>
-<h3 id="status">Awaiting market data</h3>
-<small>Version 1.0 · Research and paper trading</small>
+<small>MARKET DATA STATUS</small>
+<h3 id="status">Connecting to market data...</h3>
+<p id="updated"></p>
+<small>Yahoo Finance daily data. Not live prices.</small>
+<button onclick="loadMarket()">Refresh Market Data</button>
 </div>
+
+<div class="card">
+<h3>Market Overview</h3>
+<div class="grid">
+<div class="metric">
+<small>Stocks scanned</small>
+<strong id="total">--</strong>
+</div>
+<div class="metric">
+<small>Advancing</small>
+<strong class="green" id="up">--</strong>
+</div>
+<div class="metric">
+<small>Declining</small>
+<strong class="red" id="down">--</strong>
+</div>
+<div class="metric">
+<small>Unchanged</small>
+<strong id="flat">--</strong>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h3 class="green">Top Gainers</h3>
+<div id="gainers">Waiting for data</div>
+</div>
+
+<div class="card">
+<h3 class="red">Top Losers</h3>
+<div id="losers">Waiting for data</div>
+</div>
+
 <div class="card">
 <h3>Market Scanner</h3>
-<div class="tabs">
+<div class="grid tabs">
 <button onclick="mode('Intraday')">Intraday</button>
 <button onclick="mode('Swing')">Swing</button>
 <button onclick="mode('Penny')">Penny Stocks</button>
 <button onclick="mode('Long-term')">Long-term</button>
 </div>
-<h3 id="strategy">Penny Scanner</h3>
+
+<h3 id="strategy">All Stocks</h3>
+<p id="strategyNote">Browse available daily stock data.</p>
+
 <input id="search" placeholder="Search stock symbol" oninput="scan()">
-<label>Maximum stock price (₹)</label>
-<input id="maxPrice" type="number" value="10" min="0">
-<label>Minimum trading volume</label>
+
+<label>Maximum price (₹)</label>
+<input id="maxPrice" type="number" value="100000" min="0">
+
+<label>Minimum volume</label>
 <input id="minVolume" type="number" value="10000" min="0">
-<p>Import a CSV file with columns: symbol,price,volume,change</p>
-<input type="file" accept=".csv" onchange="loadCSV(event)">
+
+<label>Sort results by</label>
+<select id="sort" onchange="scan()">
+<option value="volume">Highest volume</option>
+<option value="gain">Highest gain</option>
+<option value="loss">Highest loss</option>
+<option value="price">Lowest price</option>
+</select>
+
 <button onclick="scan()">Run Market Scan</button>
-<div id="results">No market data loaded.</div>
+<div id="results">Waiting for market data...</div>
 </div>
+
 <div class="card">
 <h3>Paper Trading</h3>
 <small>Virtual cash balance</small>
 <h1 id="balance"></h1>
+
 <input id="symbol" placeholder="Stock symbol">
 <input id="price" type="number" placeholder="Execution price ₹">
 <input id="qty" type="number" placeholder="Quantity">
+
+<div class="grid">
 <button onclick="trade('BUY')">Virtual Buy</button>
 <button onclick="trade('SELL')">Virtual Sell</button>
+</div>
+
+<h3>Portfolio Holdings</h3>
+<div id="positions"></div>
+
+<h3>Trade History</h3>
 <div id="history"></div>
+<small>Simulated executions. Brokerage, taxes and slippage are excluded.</small>
 </div>
+
 <div class="card">
-<h3>AI Research Engine</h3>
-<p>Planned integrations:</p>
-<p>○ RSI and MACD<br>
-○ Moving averages<br>
-○ Fundamental analysis<br>
-○ News sentiment<br>
-○ Automatic daily scans<br>
-○ Backtesting</p>
+<h3>Research Engine</h3>
+<p>Automatic daily data collection enabled.</p>
+<p>Upcoming: RSI, MACD, moving averages, fundamental analysis, news intelligence and backtesting.</p>
 </div>
-<small>Educational research only. No real orders are placed. Imported data may be delayed.</small>
+
+<small>Educational research only. No real orders are placed. Market data may be delayed or incomplete.</small>
+
 <script>
-let stocks=[];
-let selected='Penny';
+const DATA_URL =
+"https://raw.githubusercontent.com/takemenieola143-netizen/stockmind-ai/main/market_data.csv";
+
+const $ = id => document.getElementById(id);
+
+let stocks = [];
 let wallet;
+
+try {
+wallet = JSON.parse(localStorage.getItem("stockmind")) ||
+{cash:100000,positions:{},history:[]};
+} catch(e) {
+wallet = {cash:100000,positions:{},history:[]};
+}
+
+function money(n){
+return "₹"+n.toLocaleString("en-IN",{
+minimumFractionDigits:2,
+maximumFractionDigits:2
+});
+}
+
+async function loadMarket(){
+$("status").textContent="Fetching market data...";
+$("updated").textContent="";
+
 try{
-wallet=JSON.parse(localStorage.getItem('stockmind'))||{cash:100000,positions:{},history:[]};
-}catch(e){
-wallet={cash:100000,positions:{},history:[]};
+const response=await fetch(DATA_URL+"?t="+Date.now(),{
+cache:"no-store"
+});
+
+if(!response.ok){
+throw new Error("HTTP "+response.status);
 }
-function mode(m){
-selected=m;
-document.getElementById('strategy').textContent=m+' Scanner';
-document.getElementById('maxPrice').value=m==='Penny'?10:100000;
-scan();
+
+const csv=await response.text();
+const rows=csv.trim().split(/\r?\n/);
+const header=rows.shift().trim().toLowerCase();
+
+if(header!=="symbol,price,volume,change"){
+throw new Error("Unexpected data format");
 }
-async function loadCSV(event){
-const file=event.target.files[0];
-if(!file)return;
-const rows=(await file.text()).trim().split(/\r?\n/);
-const header=rows.shift().toLowerCase().replace(/^\uFEFF/,'').split(',').map(x=>x.trim());
-const keys=['symbol','price','volume','change'];
-if(!keys.every(k=>header.includes(k))){
-alert('CSV must contain symbol,price,volume,change');
-return;
-}
-stocks=rows.map(r=>{
-const a=r.split(',');
+
+const fresh=rows.map(row=>{
+const a=row.split(",");
 return {
-symbol:(a[header.indexOf('symbol')]||'').trim(),
-price:Number(a[header.indexOf('price')]),
-volume:Number(a[header.indexOf('volume')]),
-change:Number(a[header.indexOf('change')])
+symbol:a[0].trim(),
+price:Number(a[1]),
+volume:Number(a[2]),
+change:Number(a[3])
 };
-}).filter(s=>s.symbol&&s.price>0&&Number.isFinite(s.volume)&&s.volume>=0&&Number.isFinite(s.change));
-document.getElementById('status').textContent=stocks.length+' stocks imported';
+}).filter(s=>
+s.symbol &&
+Number.isFinite(s.price) &&
+s.price>0 &&
+Number.isFinite(s.volume) &&
+s.volume>=0 &&
+Number.isFinite(s.change)
+);
+
+if(!fresh.length){
+throw new Error("No valid stock records");
+}
+
+stocks=fresh;
+
+$("status").textContent="Connected · "+stocks.length+" stocks";
+$("updated").textContent=
+"Retrieved: "+new Date().toLocaleString("en-IN")+
+". Trading session date unavailable.";
+
+overview();
+scan();
+
+}catch(error){
+$("status").textContent="Data connection failed";
+$("updated").textContent=
+error.message+". Existing results, if any, may be stale.";
+}
+}
+
+function stockRow(s,parent){
+const row=document.createElement("div");
+row.className="stock";
+
+const head=document.createElement("div");
+head.className="stockhead";
+
+const name=document.createElement("strong");
+name.textContent=s.symbol;
+
+const change=document.createElement("strong");
+change.className=s.change>=0?"green":"red";
+change.textContent=(s.change>0?"+":"")+s.change.toFixed(2)+"%";
+
+head.append(name,change);
+
+const details=document.createElement("p");
+details.textContent=money(s.price)+
+" · Volume: "+s.volume.toLocaleString("en-IN");
+
+const button=document.createElement("button");
+button.textContent="Paper Trade";
+button.onclick=()=>{
+$("symbol").value=s.symbol;
+$("price").value=s.price;
+$("qty").focus();
+};
+
+row.append(head,details,button);
+parent.append(row);
+}
+
+function overview(){
+$("total").textContent=stocks.length;
+$("up").textContent=stocks.filter(s=>s.change>0).length;
+$("down").textContent=stocks.filter(s=>s.change<0).length;
+$("flat").textContent=stocks.filter(s=>s.change===0).length;
+
+const sorted=[...stocks].sort((a,b)=>b.change-a.change);
+
+$("gainers").replaceChildren();
+$("losers").replaceChildren();
+
+const gainers=sorted.filter(s=>s.change>0).slice(0,3);
+const losers=[...sorted].reverse().filter(s=>s.change<0).slice(0,3);
+
+gainers.forEach(s=>stockRow(s,$("gainers")));
+losers.forEach(s=>stockRow(s,$("losers")));
+
+if(!gainers.length)$("gainers").textContent="No gainers";
+if(!losers.length)$("losers").textContent="No losers";
+}
+
+function mode(m){
+$("strategy").textContent=m+" Scanner";
+$("maxPrice").value=m==="Penny"?10:100000;
+
+const notes={
+"Intraday":"Daily data only. Live intraday strategy not available.",
+"Swing":"Daily momentum screening. Technical signals not yet implemented.",
+"Penny":"Price filter below or equal to ₹10. Low price does not mean undervalued.",
+"Long-term":"Stock browsing only. Fundamental analysis not yet connected."
+};
+
+$("strategyNote").textContent=notes[m];
+$("sort").value=m==="Swing"?"gain":"volume";
 scan();
 }
+
 function scan(){
-const result=document.getElementById('results');
+const result=$("results");
 result.replaceChildren();
-const max=Number(document.getElementById('maxPrice').value);
-const min=Number(document.getElementById('minVolume').value);
-const q=document.getElementById('search').value.toUpperCase();
-let filtered=stocks.filter(s=>s.price<=max&&s.volume>=min&&s.symbol.toUpperCase().includes(q));
-filtered.sort((a,b)=>b.volume-a.volume);
-const note=document.createElement('p');
-note.textContent=filtered.length+' matches. Ranked by volume, not investment quality.';
+
+const max=Number($("maxPrice").value);
+const min=Number($("minVolume").value);
+const q=$("search").value.toUpperCase().trim();
+
+let filtered=stocks.filter(s=>
+s.price<=max &&
+s.volume>=min &&
+s.symbol.toUpperCase().includes(q)
+);
+
+const sort=$("sort").value;
+
+filtered.sort((a,b)=>{
+if(sort==="gain")return b.change-a.change;
+if(sort==="loss")return a.change-b.change;
+if(sort==="price")return a.price-b.price;
+return b.volume-a.volume;
+});
+
+const note=document.createElement("p");
+note.textContent=filtered.length+
+" matches from "+stocks.length+" tracked stocks.";
 result.append(note);
-filtered.slice(0,100).forEach(s=>{
-const el=document.createElement('div');
-el.className='stock';
-el.textContent=s.symbol+' | ₹'+s.price.toFixed(2)+' | Change: '+s.change+'% | Volume: '+s.volume.toLocaleString('en-IN');
-result.append(el);
-});
+
+filtered.slice(0,100).forEach(s=>stockRow(s,result));
 }
+
 function render(){
-document.getElementById('balance').textContent='₹'+wallet.cash.toLocaleString('en-IN',{maximumFractionDigits:2});
-const h=document.getElementById('history');
-h.replaceChildren();
-wallet.history.slice(-10).reverse().forEach(t=>{
-const p=document.createElement('p');
+$("balance").textContent=money(wallet.cash);
+
+$("positions").replaceChildren();
+$("history").replaceChildren();
+
+const holdings=Object.entries(wallet.positions)
+.filter(([s,q])=>q>0);
+
+holdings.forEach(([s,q])=>{
+const p=document.createElement("p");
+p.textContent=s+" · "+q+" shares";
+$("positions").append(p);
+});
+
+if(!holdings.length){
+$("positions").textContent="No virtual holdings";
+}
+
+wallet.history.slice(-20).reverse().forEach(t=>{
+const p=document.createElement("p");
 p.textContent=t;
-h.append(p);
+$("history").append(p);
 });
 }
+
 function trade(side){
-const s=document.getElementById('symbol').value.trim().toUpperCase();
-const p=Number(document.getElementById('price').value);
-const q=Number(document.getElementById('qty').value);
-if(!/^[A-Z0-9&.-]{1,30}$/.test(s)||!Number.isFinite(p)||p<=0||!Number.isSafeInteger(q)||q<=0){
-alert('Enter a valid symbol, price and quantity');
+const s=$("symbol").value.trim().toUpperCase();
+const p=Number($("price").value);
+const q=Number($("qty").value);
+
+if(!/^[A-Z0-9&.-]{1,30}$/.test(s)||
+!Number.isFinite(p)||p<=0||
+!Number.isSafeInteger(q)||q<=0){
+alert("Enter valid trade details");
 return;
 }
+
 const cost=p*q;
-const held=Object.hasOwn(wallet.positions,s)?wallet.positions[s]:0;
-if(side==='BUY'){
-if(cost>wallet.cash){alert('Insufficient virtual cash');return;}
+if(!Number.isFinite(cost))return;
+
+const held=Object.hasOwn(wallet.positions,s)?
+wallet.positions[s]:0;
+
+if(side==="BUY"){
+if(cost>wallet.cash){
+alert("Insufficient virtual cash");
+return;
+}
 wallet.cash-=cost;
 wallet.positions[s]=held+q;
 }else{
-if(held<q){alert('Insufficient virtual shares');return;}
+if(held<q){
+alert("Insufficient virtual shares");
+return;
+}
 wallet.cash+=cost;
 wallet.positions[s]=held-q;
 }
-wallet.history.push(side+' '+q+' '+s+' @ ₹'+p);
-localStorage.setItem('stockmind',JSON.stringify(wallet));
+
+wallet.history.push(side+" "+q+" "+s+" @ "+money(p));
+
+try{
+localStorage.setItem("stockmind",JSON.stringify(wallet));
+}catch(e){
+alert("Browser storage unavailable. Trade may not persist.");
+}
+
 render();
 }
+
 render();
+loadMarket();
 </script>
 </body>
 </html>
