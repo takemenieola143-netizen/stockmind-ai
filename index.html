@@ -2,356 +2,372 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockMind AI Pro</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockMind AI 4.0</title>
 <style>
 *{box-sizing:border-box}
-body{background:#0b1220;color:#e2e8f0;font:16px system-ui;margin:auto;padding:16px;max-width:1000px}
-h1{color:#34d399}
-section{background:#162235;padding:16px;border-radius:14px;margin:14px 0}
-input,select,button{font:inherit;padding:12px;border:1px solid #475569;border-radius:8px;background:#0b1220;color:white;width:100%;margin:5px 0}
-button{background:#34d399;color:#052e25;font-weight:bold}
-small,p{color:#aab8cb}
-article{border-bottom:1px solid #475569;padding:12px 0}
-summary{cursor:pointer}
-svg{width:100%;height:100px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+body{margin:0;background:#080f1e;color:#e2e8f0;font-family:Arial,sans-serif}
+main{max-width:1100px;margin:auto;padding:18px}
+h1{color:#34d399;font-size:32px}
+h2{font-size:21px}
+p,small{color:#94a3b8;line-height:1.6}
+.card{background:#162235;border:1px solid #29384d;border-radius:16px;padding:16px;margin:16px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.metric{background:#0b1220;padding:14px;border-radius:12px;overflow-wrap:anywhere}
+.metric strong{display:block;font-size:23px;margin-top:7px}
 .green{color:#34d399}
 .red{color:#fb7185}
+input,select,button{width:100%;padding:13px;border-radius:9px;font-size:16px;margin:6px 0}
+input,select{background:#0b1220;color:white;border:1px solid #526077}
+button{background:#34d399;color:#052e25;font-weight:bold;border:0;cursor:pointer}
+button:disabled{opacity:.5}
+details{border-bottom:1px solid #344155;padding:15px 0}
+summary{cursor:pointer;line-height:1.7}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:10px 5px;border-bottom:1px solid #334155;text-align:left}
+.scroll{overflow-x:auto}
+.bar{height:8px;background:#334155;border-radius:8px;overflow:hidden;margin:10px 0}
+.fill{height:100%;background:#34d399}
+.badge{background:#24354b;padding:6px 10px;border-radius:8px;font-size:12px}
+.nav{display:flex;flex-wrap:wrap;gap:8px}
+.nav a{color:#34d399;text-decoration:none;background:#162235;padding:10px;border-radius:8px;font-size:13px}
 </style>
 </head>
 <body>
+<main>
+<h1>StockMind AI 4.0</h1>
+<p>Indian Equity Research Terminal</p>
 
-<h1>StockMind AI Pro</h1>
-<p>Daily Indian equity research</p>
-
-<section>
-<small>MARKET DATA STATUS</small>
-<h3 id="status">Loading snapshot...</h3>
-<button id="refresh">Refresh Market Data</button>
-<p id="breadth"></p>
-<p id="updated"></p>
-<small>Daily historical data. Not live prices.</small>
-</section>
-
-<section>
-<h2>Research Scanner</h2>
-<input id="search" placeholder="Search stock symbol">
-
-<select id="mode">
-<option value="all">All stocks</option>
-<option value="5">Penny stocks below ₹5</option>
-<option value="10">Penny stocks below ₹10</option>
-<option value="20">Penny stocks below ₹20</option>
-<option value="swing">Swing momentum</option>
-<option value="long">Long-term technical trend</option>
-</select>
-
-<select id="sort">
-<option value="score">Highest technical score</option>
-<option value="gain">Top gainers</option>
-<option value="loss">Top losers</option>
-<option value="fall">Largest historical decline</option>
-<option value="volume">Highest volume</option>
-<option value="price">Lowest price</option>
-</select>
-
-<div id="results"></div>
-</section>
-
-<section>
-<h2>Paper Trading</h2>
-<p id="wallet"></p>
-<input id="symbol" placeholder="Stock symbol">
-<input id="qty" type="number" min="1" placeholder="Number of shares">
-
-<div class="grid">
-<button id="buy">Virtual Buy</button>
-<button id="sell">Virtual Sell</button>
+<div class="nav">
+<a href="#market">Market</a>
+<a href="#scanner">Scanner</a>
+<a href="#trading">Paper Trading</a>
+<a href="#portfolio">Portfolio</a>
 </div>
 
-<h3>Portfolio Holdings</h3>
-<p id="holdings"></p>
-<h3>Trade History</h3>
-<p id="trades"></p>
-<small>Simulated trades using available closing prices. No fees or slippage.</small>
+<section class="card" id="market">
+<h2>Market Intelligence</h2>
+<p id="status">Loading market data...</p>
+<button onclick="loadData()">Refresh Market Data</button>
+<div class="grid">
+<div class="metric">Stocks scanned<strong id="total">—</strong></div>
+<div class="metric">Advancing<strong class="green" id="up">—</strong></div>
+<div class="metric">Declining<strong class="red" id="down">—</strong></div>
+<div class="metric">Penny stocks ≤ ₹5<strong id="penny">—</strong></div>
+</div>
+<p id="updated"></p>
+<p id="source"></p>
+<details><summary>Unavailable stocks</summary><p id="failed"></p></details>
+<small>Daily historical data. Not live intraday prices.</small>
 </section>
 
-<section>
-<h2>Research Engine</h2>
-<p>Technical scoring uses four equally weighted rules:</p>
-<p>
-Price above SMA50: 25 points<br>
-Price above SMA200: 25 points<br>
-MACD above signal: 25 points<br>
-RSI between 50 and 70: 25 points
-</p>
-<small>Scores are not probabilities of profit. Targets and stops are hypothetical. Backtests use prior-day signals and close-to-close returns without fees. Historical highs use available adjusted history. Fundamentals, news sentiment and live intraday data are not connected.</small>
+<section class="card" id="scanner">
+<h2>Smart Stock Scanner</h2>
+<input id="search" placeholder="Search stock symbol" oninput="render()">
+<select id="mode" onchange="render()">
+<option value="all">All stocks</option>
+<option value="5">Penny stocks ≤ ₹5</option>
+<option value="10">Penny stocks ≤ ₹10</option>
+<option value="20">Penny stocks ≤ ₹20</option>
+<option value="50">Stocks ≤ ₹50</option>
+<option value="momentum">Positive momentum</option>
+<option value="long">Long-term technical trend</option>
+<option value="fallen">Fallen 90% or more</option>
+<option value="volume">Unusual volume</option>
+<option value="oversold">RSI below 30</option>
+</select>
+<select id="sort" onchange="render()">
+<option value="score">Highest technical score</option>
+<option value="fall">Biggest fall from historical high</option>
+<option value="gain">Top gainers</option>
+<option value="loss">Top losers</option>
+<option value="price">Lowest price</option>
+<option value="volume">Highest volume</option>
+<option value="backtest">Highest historical strategy return</option>
+</select>
+<p id="count"></p>
+<div id="results"></div>
+<button id="more" onclick="limit+=100;render(false)">Show more stocks</button>
 </section>
+
+<section class="card" id="trading">
+<h2>Virtual Trading Simulator</h2>
+<p>Practice with ₹1,00,000 virtual money.</p>
+<div class="grid">
+<div class="metric">Available cash<strong id="cash"></strong></div>
+<div class="metric">Portfolio value<strong id="value"></strong></div>
+</div>
+<input id="tradeSymbol" placeholder="Stock symbol">
+<input id="qty" type="number" min="1" step="1" placeholder="Number of shares">
+<div class="grid">
+<button onclick="trade(true)">Virtual Buy</button>
+<button onclick="trade(false)">Virtual Sell</button>
+</div>
+<p id="message"></p>
+<small>Simulated execution at the latest available daily price. No real orders.</small>
+</section>
+
+<section class="card" id="portfolio">
+<h2>Portfolio Holdings</h2>
+<div class="scroll" id="holdings"></div>
+<h3>Trade History</h3>
+<div class="scroll" id="trades"></div>
+<button onclick="resetWallet()">Reset Virtual Portfolio</button>
+</section>
+
+<section class="card">
+<h2>Research Limitations</h2>
+<p>Technical scores are rule-based, not predictions or probabilities. Historical highs and lows depend on available Yahoo Finance history and corporate-action adjustments.</p>
+<p>Reference entry, stop and target are hypothetical ATR-based levels. Backtests use a moving-average strategy and approximate transaction costs. Past returns do not guarantee future results.</p>
+<p>Fundamentals, news sentiment and live execution are not connected in this version.</p>
+</section>
+</main>
 
 <script>
-const $=x=>document.getElementById(x);
-
-const money=x=>'₹'+Number(x).toLocaleString(
-'en-IN',{maximumFractionDigits:2}
-);
-
 let stocks=[];
-let w;
+let limit=100;
+
+const $=id=>document.getElementById(id);
+
+const valid=v=>v!==null&&v!==undefined&&v!==""&&Number.isFinite(Number(v));
+
+const fmt=v=>valid(v)?Number(v).toLocaleString("en-IN",{maximumFractionDigits:2}):"N/A";
+
+const money=v=>valid(v)?"₹"+fmt(v):"N/A";
+
+const pct=v=>valid(v)?fmt(v)+"%":"N/A";
+
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({
+"&":"&amp;",
+"<":"&lt;",
+">":"&gt;",
+'"':"&quot;",
+"'":"&#39;"
+}[c]));
+
+let wallet={cash:100000,positions:{},trades:[]};
 
 try{
-w=JSON.parse(localStorage.getItem('stockmind'))||
-{cash:100000,positions:{},history:[]};
-}catch{
-w={cash:100000,positions:{},history:[]};
-}
+const saved=localStorage.getItem("stockmind4wallet");
+if(saved)wallet=JSON.parse(saved);
+}catch(e){}
 
-async function load(){
-$('status').textContent='Loading market analysis...';
+async function loadData(){
+$("status").textContent="Loading market data...";
 
 try{
-const r=await fetch(
-'https://raw.githubusercontent.com/takemenieola143-netizen/stockmind-ai/main/market_data.json?t='+Date.now(),
-{cache:'no-store'}
-);
+const response=await fetch("./market_data.json?t="+Date.now(),{cache:"no-store"});
+if(!response.ok)throw Error("Data file unavailable");
 
-if(!r.ok)throw Error('HTTP '+r.status);
+const data=await response.json();
+if(!Array.isArray(data.stocks))throw Error("Invalid scanner output");
 
-const d=await r.json();
+stocks=data.stocks.filter(s=>valid(s.price)&&Number(s.price)>0);
 
-if(!Array.isArray(d.stocks)||!d.stocks.length){
-throw Error('No stock data available');
-}
+$("status").textContent=stocks.length+"/"+(data.requested??stocks.length)+" stocks connected";
 
-stocks=d.stocks;
+$("total").textContent=stocks.length;
+$("up").textContent=stocks.filter(s=>s.change>0).length;
+$("down").textContent=stocks.filter(s=>s.change<0).length;
+$("penny").textContent=stocks.filter(s=>s.price<=5).length;
 
-$('status').textContent=
-stocks.length+'/'+d.requested+' stocks connected';
+$("updated").textContent=data.generated?"Generated: "+new Date(data.generated).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})+" IST":"Generation time unavailable";
 
-$('updated').textContent=
-'Generated: '+d.generated+
-' | Unavailable stocks: '+d.failed.length;
+$("source").textContent="Coverage source: "+(data.universe_source??"Not reported");
 
-$('breadth').textContent=
-stocks.filter(s=>s.change>0).length+' advancing | '+
-stocks.filter(s=>s.change<0).length+' declining | '+
-stocks.filter(s=>s.change===0).length+' unchanged';
+$("failed").textContent=Array.isArray(data.failed)?data.failed.join(", ")||"None":"Not reported";
 
 render();
-wallet();
+renderWallet();
 
 }catch(e){
-$('status').textContent=
-'Snapshot unavailable: '+e.message;
-
-$('updated').textContent=
-'Existing results, if any, may be stale.';
+$("status").textContent="Unable to update: "+e.message+". Previously loaded data may be stale.";
 }
 }
 
-function render(){
-
-let a=stocks.filter(s=>
-s.symbol.includes(
-$('search').value.trim().toUpperCase()
-));
-
-let m=$('mode').value;
-
-if(+m)a=a.filter(s=>s.price<=+m);
-
-if(m==='swing')
-a=a.filter(s=>s.score>=75);
-
-if(m==='long')
-a=a.filter(s=>s.price>s.sma200);
-
-let k=$('sort').value;
-
-a.sort((x,y)=>
-k==='gain'?y.change-x.change:
-k==='loss'?x.change-y.change:
-k==='fall'?x.drawdown-y.drawdown:
-k==='price'?x.price-y.price:
-y[k]-x[k]
-);
-
-let root=$('results');
-
-root.replaceChildren();
-
-root.append(document.createTextNode(
-a.length+' matches (first 100 shown)'
-));
-
-for(const s of a.slice(0,100)){
-
-let el=document.createElement('article');
-
-let details=document.createElement('details');
-
-let head=document.createElement('summary');
-
-head.textContent=
-s.symbol+' | '+money(s.price)+
-' | '+s.change+'% | Score '+s.score+'/100';
-
-head.className=s.change>=0?'green':'red';
-
-details.append(head);
-
-let fields=[
-['Trading session',s.date],
-['Volume',s.volume],
-['RSI',s.rsi],
-['MACD',s.macd],
-['MACD signal',s.signal],
-['SMA 20',money(s.sma20)],
-['SMA 50',money(s.sma50)],
-['SMA 200',money(s.sma200)],
-['EMA 20',money(s.ema20)],
-['Bollinger upper',money(s.upper)],
-['Bollinger lower',money(s.lower)],
-['Historical high',money(s.high)],
-['Historical low',money(s.low)],
-['Decline from high',s.drawdown+'%'],
-['Hypothetical stop',money(s.stop)],
-['Hypothetical target',money(s.target)],
-['Illustrative backtest',s.backtest+'%']
-];
-
-for(const [label,value] of fields){
-let p=document.createElement('p');
-p.textContent=label+': '+value;
-details.append(p);
+function matches(s,mode){
+if(mode==="all")return true;
+if(["5","10","20","50"].includes(mode))return s.price<=Number(mode);
+if(mode==="momentum")return s.score>=80&&s.change>0;
+if(mode==="long")return valid(s.sma200)&&valid(s.sma50)&&s.price>s.sma200&&s.sma50>s.sma200;
+if(mode==="fallen")return valid(s.fall_from_high)&&s.fall_from_high>=90;
+if(mode==="volume")return valid(s.relative_volume)&&s.relative_volume>=2;
+if(mode==="oversold")return valid(s.rsi)&&s.rsi<30;
+return true;
 }
 
-let caption=document.createElement('small');
-caption.textContent='Last 90 trading sessions';
-details.append(caption);
+function render(reset=true){
+if(reset)limit=100;
 
-let svg=document.createElementNS(
-'http://www.w3.org/2000/svg','svg'
-);
+const search=$("search").value.trim().toUpperCase();
+const mode=$("mode").value;
 
-svg.setAttribute('viewBox','0 0 300 100');
+let list=stocks.filter(s=>String(s.symbol).toUpperCase().includes(search)&&matches(s,mode));
 
-let line=document.createElementNS(
-svg.namespaceURI,'polyline'
-);
-
-let lo=Math.min(...s.history);
-let hi=Math.max(...s.history);
-
-line.setAttribute('points',
-s.history.map((v,i)=>
-`${i*300/Math.max(1,s.history.length-1)},${95-90*(v-lo)/(hi-lo||1)}`
-).join(' ')
-);
-
-line.setAttribute('fill','none');
-line.setAttribute('stroke','#34d399');
-line.setAttribute('stroke-width','2');
-
-svg.append(line);
-details.append(svg);
-
-let b=document.createElement('button');
-
-b.textContent='Select for Paper Trade';
-
-b.onclick=()=>{
-$('symbol').value=s.symbol;
-$('qty').focus();
+const sorts={
+score:["score",-1],
+fall:["fall_from_high",-1],
+gain:["change",-1],
+loss:["change",1],
+price:["price",1],
+volume:["volume",-1],
+backtest:["backtest_return",-1]
 };
 
-details.append(b);
-el.append(details);
-root.append(el);
-}
-}
+const [field,direction]=sorts[$("sort").value];
 
-function wallet(){
+list.sort((a,b)=>{
+if(!valid(a[field]))return valid(b[field])?1:0;
+if(!valid(b[field]))return -1;
+return direction*(Number(a[field])-Number(b[field]));
+});
 
-let entries=Object.entries(w.positions)
-.filter(([s,q])=>q>0);
+$("count").textContent=list.length+" matches · Showing "+Math.min(limit,list.length);
 
-let value=w.cash;
-let missing=0;
+$("more").hidden=list.length<=limit;
 
-for(let [s,q] of entries){
-let x=stocks.find(t=>t.symbol===s);
-if(x)value+=x.price*q;
-else missing++;
-}
+$("results").innerHTML=list.slice(0,limit).map(s=>{
+const color=s.change>=0?"green":"red";
 
-$('wallet').textContent=
-'Cash: '+money(w.cash)+
-' | Portfolio value: '+money(value)+
-(missing?' (excludes unpriced holdings)':'');
+const rows=[
+["Trading date",esc(s.date??"N/A")],
+["Historical high",money(s.ath)],
+["Historical low",money(s.atl)],
+["History begins",esc(s.history_start??"N/A")],
+["Fall from high",pct(s.fall_from_high)],
+["RSI",fmt(s.rsi)],
+["MACD",fmt(s.macd)],
+["MACD signal",fmt(s.macd_signal)],
+["20-day SMA",money(s.sma20)],
+["50-day SMA",money(s.sma50)],
+["200-day SMA",money(s.sma200)],
+["Trading volume",fmt(s.volume)],
+["Relative volume",fmt(s.relative_volume)],
+["Reference entry",money(s.reference_entry)],
+["Hypothetical stop",money(s.reference_stop)],
+["Hypothetical target",money(s.reference_target)],
+["Strategy backtest",pct(s.backtest_return)],
+["Buy-and-hold benchmark",pct(s.benchmark_return)],
+["Maximum strategy drawdown",pct(s.max_drawdown)],
+["Backtest sessions",fmt(s.backtest_days)]
+];
 
-$('holdings').textContent=
-entries.map(([s,q])=>s+': '+q)
-.join(' | ')||'No holdings';
+const reasons=Array.isArray(s.reasons)?s.reasons.map(esc).join(" · "):"Not available";
 
-$('trades').textContent=
-w.history.slice(-10).reverse()
-.join(' | ')||'No trades';
-}
-
-function trade(b){
-
-let s=stocks.find(x=>
-x.symbol===$('symbol').value.trim().toUpperCase()
-);
-
-let q=Number($('qty').value);
-
-if(!s||!Number.isSafeInteger(q)||q<1){
-return alert('Choose a valid stock and quantity');
-}
-
-let held=Object.hasOwn(w.positions,s.symbol)?
-w.positions[s.symbol]:0;
-
-let c=s.price*q;
-
-if(!Number.isFinite(c)){
-return alert('Invalid trade value');
-}
-
-if(b?c>w.cash:q>held){
-return alert('Insufficient cash or shares');
+return `<details>
+<summary>
+<strong>${esc(s.symbol)}</strong> · ${money(s.price)}
+<span class="${color}">${pct(s.change)}</span><br>
+<small>Technical score: ${fmt(s.score)}/100</small>
+</summary>
+<div class="bar"><div class="fill" style="width:${Math.max(0,Math.min(100,Number(s.score)||0))}%"></div></div>
+<p>${reasons}</p>
+<table>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</table>
+<small>Research only. A high score does not guarantee a price increase.</small>
+</details>`;
+}).join("")||"<p>No matching stocks found.</p>";
 }
 
-w.cash+=b?-c:c;
-w.positions[s.symbol]=held+(b?q:-q);
-
-w.history.push(
-`${b?'BUY':'SELL'} ${q} ${s.symbol} @ ${s.price} (${s.date})`
-);
-
+function saveWallet(){
 try{
-localStorage.setItem(
-'stockmind',JSON.stringify(w)
-);
-}catch{
-alert('Browser storage unavailable');
+localStorage.setItem("stockmind4wallet",JSON.stringify(wallet));
+}catch(e){
+$("message").textContent="Browser storage unavailable. Trades may not persist.";
+}
+renderWallet();
 }
 
-wallet();
+function trade(buy){
+const symbol=$("tradeSymbol").value.trim().toUpperCase();
+const qty=Number($("qty").value);
+const stock=stocks.find(s=>s.symbol===symbol);
+
+if(!stock||!Number.isSafeInteger(qty)||qty<=0){
+$("message").textContent="Enter a valid stock symbol and whole share quantity.";
+return;
 }
 
-$('refresh').onclick=load;
-$('search').oninput=render;
-$('mode').onchange=render;
-$('sort').onchange=render;
-$('buy').onclick=()=>trade(true);
-$('sell').onclick=()=>trade(false);
+const price=Number(stock.price);
+const cost=qty*price;
+let holding=wallet.positions[symbol]||{qty:0,cost:0};
 
-wallet();
-load();
+if(buy){
+if(cost>wallet.cash){
+$("message").textContent="Insufficient virtual cash.";
+return;
+}
+holding.cost+=cost;
+holding.qty+=qty;
+wallet.cash-=cost;
+wallet.positions[symbol]=holding;
+}else{
+if(qty>holding.qty){
+$("message").textContent="Insufficient shares.";
+return;
+}
+const avg=holding.cost/holding.qty;
+holding.cost-=avg*qty;
+holding.qty-=qty;
+wallet.cash+=cost;
+if(holding.qty===0)delete wallet.positions[symbol];
+else wallet.positions[symbol]=holding;
+}
+
+wallet.trades.unshift({
+symbol,
+type:buy?"BUY":"SELL",
+qty,
+price,
+date:new Date().toLocaleString("en-IN")
+});
+
+$("message").textContent="Virtual trade completed: "+qty+" "+symbol;
+saveWallet();
+}
+
+function renderWallet(){
+let value=wallet.cash;
+let rows="";
+let complete=true;
+
+for(const [symbol,h] of Object.entries(wallet.positions)){
+const stock=stocks.find(s=>s.symbol===symbol);
+const current=stock?stock.price*h.qty:null;
+const profit=valid(current)?current-h.cost:null;
+
+if(valid(current))value+=current;
+else complete=false;
+
+rows+=`<tr>
+<td>${esc(symbol)}</td>
+<td>${h.qty}</td>
+<td>${money(h.cost/h.qty)}</td>
+<td>${money(current)}</td>
+<td class="${profit>=0?"green":"red"}">${money(profit)}</td>
+</tr>`;
+}
+
+$("cash").textContent=money(wallet.cash);
+$("value").textContent=complete?money(value):"Incomplete";
+
+$("holdings").innerHTML=rows?
+`<table><tr><th>Stock</th><th>Qty</th><th>Avg cost</th><th>Value</th><th>P/L</th></tr>${rows}</table>`:
+"<p>No holdings yet.</p>";
+
+$("trades").innerHTML=wallet.trades.length?
+`<table><tr><th>Stock</th><th>Action</th><th>Qty</th><th>Price</th><th>Date</th></tr>${wallet.trades.map(t=>`<tr><td>${esc(t.symbol)}</td><td>${esc(t.type)}</td><td>${fmt(t.qty)}</td><td>${money(t.price)}</td><td>${esc(t.date)}</td></tr>`).join("")}</table>`:
+"<p>No trades yet.</p>";
+}
+
+function resetWallet(){
+if(!confirm("Reset all virtual funds and trades?"))return;
+wallet={cash:100000,positions:{},trades:[]};
+saveWallet();
+}
+
+renderWallet();
+loadData();
 </script>
 </body>
 </html>
