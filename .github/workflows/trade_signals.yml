@@ -1,0 +1,72 @@
+
+name: StockMind AI Trade Signals
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trade-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate agent code
+        run: python -m py_compile trade_agents.py
+
+      - name: Check market data
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("market_data.json") as f:
+              data = json.load(f)
+
+          print("Market version:", data.get("version"))
+          print("Stocks:", len(data.get("stocks", [])))
+
+          assert data.get("stocks"), "No stock data"
+
+          if str(data.get("version")) != "6.0":
+              print("WARNING: Version 6.0 data unavailable")
+          PY
+
+      - name: Run nine-agent analysis
+        run: python trade_agents.py
+
+      - name: Verify trading signals
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("trade_signals.json") as f:
+              data = json.load(f)
+
+          assert data["stocks_analysed"] > 0
+
+          print("Version:", data["version"])
+          print("Stocks:", data["stocks_analysed"])
+          print("Signal summary:")
+
+          for signal, count in data["signal_counts"].items():
+              print(signal, count)
+
+          print("Multi-agent test completed")
+          PY
+
+      - name: Upload trading signal report
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockmind-v61-signals
+          path: trade_signals.json
+          if-no-files-found: error
