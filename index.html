@@ -779,3 +779,344 @@ not guarantee future returns. Not a trading recommendation.
 })();
 </script>
 
+<section id="trade-v61" style="margin:20px 12px;padding:18px;background:#111827;color:#e5e7eb;border:1px solid #334155;border-radius:16px;font-family:Arial,sans-serif">
+
+<h2 style="color:#38bdf8">
+StockMind AI 6.1 - Trade Signals
+</h2>
+
+<p>Nine-agent decision engine</p>
+
+<p id="ts-status">Loading trading signals...</p>
+
+<div id="ts-summary" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0"></div>
+
+<input id="ts-search"
+placeholder="Search stock, e.g. DIXON"
+style="width:100%;box-sizing:border-box;padding:12px;margin:8px 0;background:#1e293b;color:white;border:1px solid #475569;border-radius:8px">
+
+<select id="ts-filter"
+style="width:100%;padding:12px;margin:8px 0;background:#1e293b;color:white;border-radius:8px">
+
+<option value="ALL">All signals</option>
+<option value="BUY WATCHLIST">BUY WATCHLIST</option>
+<option value="EXIT REVIEW">EXIT REVIEW</option>
+<option value="MONITOR">MONITOR</option>
+<option value="WAIT">WAIT</option>
+
+</select>
+
+<p id="ts-count"></p>
+
+<div id="ts-list"></div>
+
+<button id="ts-more"
+style="width:100%;padding:12px;margin:10px 0;background:#334155;color:white;border:0;border-radius:8px">
+Show more stocks
+</button>
+
+<p style="color:#94a3b8;font-size:12px">
+Experimental paper trading research only.
+Signals are not guaranteed forecasts.
+Fundamental and news agents are not yet connected.
+</p>
+
+</section>
+
+<script>
+(() => {
+
+  const el = id => document.getElementById(id);
+
+  let stocks = [];
+  let limit = 30;
+  let stale = true;
+
+  const decisions = [
+    "BUY WATCHLIST",
+    "EXIT REVIEW",
+    "MONITOR",
+    "WAIT"
+  ];
+
+  const colors = {
+    "BUY WATCHLIST": "#22c55e",
+    "EXIT REVIEW": "#ef4444",
+    "MONITOR": "#eab308",
+    "WAIT": "#94a3b8",
+    "POSITIVE": "#22c55e",
+    "NEGATIVE": "#ef4444",
+    "NEUTRAL": "#eab308",
+    "BLOCK": "#ef4444",
+    "UNKNOWN": "#94a3b8"
+  };
+
+  function esc(v) {
+    return String(v ?? "N/A")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function money(v) {
+    if (v == null || !Number.isFinite(Number(v))) {
+      return "N/A";
+    }
+
+    return "₹" + Number(v).toLocaleString(
+      "en-IN",
+      {maximumFractionDigits: 2}
+    );
+  }
+
+  function effectiveDecision(s) {
+    return stale ? "WAIT" : s.decision;
+  }
+
+  function renderSummary() {
+
+    el("ts-summary").innerHTML = decisions.map(d => {
+
+      const count = stocks.filter(
+        s => effectiveDecision(s) === d
+      ).length;
+
+      return `
+        <button data-filter="${d}"
+        style="padding:15px;background:#1e293b;
+        border:1px solid #475569;border-radius:10px;
+        color:${colors[d]}">
+
+        <small>${d}</small>
+        <h2>${count.toLocaleString("en-IN")}</h2>
+
+        </button>`;
+
+    }).join("");
+
+    el("ts-summary").querySelectorAll("button")
+      .forEach(button => {
+        button.addEventListener("click", () => {
+          el("ts-filter").value = button.dataset.filter;
+          limit = 30;
+          renderStocks();
+        });
+      });
+  }
+
+  function renderStocks() {
+
+    const query = el("ts-search").value
+      .trim().toUpperCase();
+
+    const filter = el("ts-filter").value;
+
+    const filtered = stocks.filter(s => {
+
+      const matches = String(s.symbol || "")
+        .toUpperCase().includes(query);
+
+      return matches && (
+        filter === "ALL" ||
+        effectiveDecision(s) === filter
+      );
+
+    });
+
+    filtered.sort((a, b) => {
+      return decisions.indexOf(effectiveDecision(a))
+        - decisions.indexOf(effectiveDecision(b))
+        || (Number(b.technical_score) || 0)
+        - (Number(a.technical_score) || 0);
+    });
+
+    el("ts-count").textContent =
+      filtered.length + " matching stocks";
+
+    el("ts-more").hidden = filtered.length <= limit;
+
+    if (!filtered.length) {
+      el("ts-list").textContent =
+        "No stocks meet this filter.";
+      return;
+    }
+
+    el("ts-list").innerHTML =
+      filtered.slice(0, limit).map(s => {
+
+        const decision = effectiveDecision(s);
+        const a = s.agents || {};
+        const plan = a.trade_planning || {};
+
+        const agents = Object.entries(a).map(
+          ([name, value]) => `
+          <div style="border-bottom:1px solid #334155;
+          padding:12px 0">
+
+          <strong style="text-transform:capitalize">
+          ${esc(name.replace(/_/g, " "))}
+          </strong>
+
+          <p style="color:${colors[value.status] || "#94a3b8"}">
+          ${esc(value.status)}
+          </p>
+
+          <small>${esc(value.reason)}</small>
+
+          </div>`
+        ).join("");
+
+        return `
+        <details style="background:#1e293b;
+        padding:15px;margin:10px 0;
+        border-radius:12px">
+
+          <summary style="cursor:pointer">
+
+            <strong>${esc(s.symbol)}</strong>
+
+            <span style="color:${colors[decision] || "#94a3b8"}">
+            ${esc(decision)}
+            </span>
+
+            <p>${money(s.price)}
+            | Score: ${esc(s.technical_score)}/100</p>
+
+          </summary>
+
+          <p>Price date: ${esc(s.date)}</p>
+
+          <h3>Master Agent Decision</h3>
+
+          <strong style="color:${colors[decision] || "#94a3b8"}">
+          ${esc(decision)}
+          </strong>
+
+          <p>${stale
+            ? "Report freshness not confirmed."
+            : esc(s.reason)}</p>
+
+          <h3>Reference Trade Levels</h3>
+
+          <p>Entry: ${money(plan.entry)}</p>
+
+          <p style="color:#22c55e">
+          Target: ${money(plan.target)}</p>
+
+          <p style="color:#ef4444">
+          Stop-loss: ${money(plan.stop_loss)}</p>
+
+          <p>Reward-to-risk:
+          ${esc(plan.reward_risk)} : 1</p>
+
+          <p>Positive agents:
+          ${esc(s.positive_votes)}</p>
+
+          <p>Unknown agents:
+          ${esc(s.unknown_agents)}</p>
+
+          <p>Risk blocks:
+          ${esc(s.risk_blocks)}</p>
+
+          <h3>Individual Agent Analysis</h3>
+
+          ${agents}
+
+        </details>`;
+
+      }).join("");
+  }
+
+  async function loadSignals() {
+
+    try {
+
+      const response = await fetch(
+        "trade_signals.json?t=" + Date.now(),
+        {cache: "no-store"}
+      );
+
+      if (!response.ok) {
+        throw new Error("Report not published");
+      }
+
+      const data = await response.json();
+
+      if (
+        String(data.version) !== "6.1" ||
+        String(data.source_version) !== "6.0" ||
+        !Array.isArray(data.stocks)
+      ) {
+        throw new Error("Unexpected report format");
+      }
+
+      stocks = data.stocks;
+
+      const today = new Intl.DateTimeFormat(
+        "en-CA",
+        {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }
+      ).format(new Date());
+
+      const generated = Date.parse(data.generated);
+
+      stale =
+        data.expected_market_date !== today ||
+        !Number.isFinite(generated) ||
+        generated > Date.now() ||
+        Date.now() - generated > 86400000;
+
+      el("ts-status").textContent =
+        stocks.length + " stocks | Market date: "
+        + data.expected_market_date
+        + (stale
+          ? " | Freshness not confirmed - WAIT"
+          : " | Experimental research signals");
+
+      renderSummary();
+      renderStocks();
+
+    } catch (error) {
+
+      el("ts-status").textContent =
+        "Awaiting StockMind 6.1 signal report.";
+
+    }
+  }
+
+  el("ts-search").addEventListener("input", () => {
+    limit = 30;
+    renderStocks();
+  });
+
+  el("ts-filter").addEventListener("change", () => {
+    limit = 30;
+    renderStocks();
+  });
+
+  el("ts-more").addEventListener("click", () => {
+    limit += 30;
+    renderStocks();
+  });
+
+  const nav = document.createElement("a");
+  nav.href = "#trade-v61";
+  nav.textContent = "AI Trade Signals 6.1";
+  nav.style.cssText =
+    "display:block;margin:15px;color:#38bdf8;font-weight:bold";
+
+  document.body.prepend(nav);
+
+  loadSignals();
+
+})();
+</script>
+
+
+
