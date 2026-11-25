@@ -8,6 +8,11 @@ on:
         description: Test StockMind AI 6.0
         type: boolean
         default: true
+      max_symbols:
+        description: Stock limit (0 = Full market)
+        type: string
+        default: '0'
+
   schedule:
     - cron: '30 11 * * 1-5'
 
@@ -22,6 +27,12 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+
+    env:
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
 
     steps:
       - name: Checkout repository
@@ -42,21 +53,39 @@ jobs:
       - name: Test StockMind AI 6.0
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_v6 }}
         env:
-          MAX_SYMBOLS: '50'
-          PYTHONUNBUFFERED: '1'
-          OMP_NUM_THREADS: '2'
-          OPENBLAS_NUM_THREADS: '2'
+          MAX_SYMBOLS: ${{ inputs.max_symbols }}
         run: |
           python -m py_compile ai_engine.py
           python upgrade_scanner.py
           python -m py_compile scanner.py
           python scanner.py
 
+      - name: Verify test results
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_v6 }}
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("market_data.json") as f:
+              data = json.load(f)
+
+          assert str(data.get("version")) == "6.0"
+          assert "ai_diagnostics" in data
+
+          print("Version 6.0 report verified")
+
+          for h, d in data["ai_diagnostics"].items():
+              print("Horizon:", h)
+              print("Selected:", d.get("selected_models"))
+              print("Evaluation:", d.get("evaluation"))
+              print("Reliable:", d.get("reliable"))
+          PY
+
       - name: Upload test results
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_v6 }}
         uses: actions/upload-artifact@v4
         with:
-          name: stockmind-v6-test
+          name: stockmind-v6-full-test
           path: |
             market_data.json
             market_data.csv
@@ -65,7 +94,6 @@ jobs:
         if: ${{ github.event_name == 'schedule' || !inputs.test_v6 }}
         env:
           MAX_SYMBOLS: '0'
-          PYTHONUNBUFFERED: '1'
         run: python scanner.py
 
       - name: Save market data
