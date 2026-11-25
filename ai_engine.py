@@ -500,3 +500,23 @@ def train_engine(data, market_close=None):
             }
 
     return results, diagnostics
+def _json_safe(value):
+    if isinstance(value, np.generic):
+        return _json_safe(value.item())
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
+_original_train_engine = train_engine
+
+
+def train_engine(data, market_close=None):
+    results, diagnostics = _original_train_engine(
+        data, market_close
+    )
+    return _json_safe(results), _json_safe(diagnostics)
