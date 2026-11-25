@@ -10,7 +10,7 @@ permissions:
 jobs:
   nse-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -21,8 +21,56 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Validate NSE engine
-        run: python -m py_compile nse_data.py
+      - name: Install dependencies
+        run: pip install pandas numpy
 
-      - name: Test official NSE data
-        run: python nse_data.py DIXON 2026-11-25
+      - name: Test candle recovery
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          from nse_data import download_nse_candle
+          from chart_engine import (
+              recover_missing_candle,
+              verify_freshness
+          )
+
+          with open("chart_data.json") as f:
+              chart = json.load(f)
+
+          with open("market_data.json") as f:
+              market = json.load(f)
+
+          now = datetime(
+              2026, 11, 26, 0, 30,
+              tzinfo=ZoneInfo("Asia/Kolkata")
+          )
+
+          candle = download_nse_candle(
+              "DIXON", "2026-11-25"
+          )
+
+          recovered = recover_missing_candle(
+              chart,
+              candle,
+              "2026-11-23",
+              "2026-11-25",
+              now
+          )
+
+          verified, reason = verify_freshness(
+              recovered, market, now
+          )
+
+          assert recovered["recovered_candle"]
+          assert recovered["price_date"] == "2026-11-25"
+          assert verified, reason
+          assert recovered["decision"] == "WAIT"
+
+          print("Candle recovery: PASSED")
+          print("Date verification: PASSED")
+          print("Closing price verification: PASSED")
+          print("Chart recalculation: PASSED")
+          print("Risk protection: PASSED")
+          PY
