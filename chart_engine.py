@@ -172,6 +172,54 @@ if __name__ == '__main__':
         )
     ]
 
+    def scanner_style_download():
+
+        companion = (
+            "RELIANCE.NS"
+            if ticker != "RELIANCE.NS"
+            else "TCS.NS"
+        )
+
+        batch = yf.download(
+            [ticker, companion],
+            period="max",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=False,
+            threads=4,
+            timeout=30,
+            progress=False
+        )
+
+        if batch.empty:
+            raise ValueError(
+                "Scanner-style download empty"
+            )
+
+        if isinstance(batch.columns, pd.MultiIndex):
+            frame = batch[ticker].copy()
+        else:
+            frame = batch.copy()
+
+        frame = frame.dropna(
+            subset=["Open", "High", "Low", "Close", "Volume"]
+        ).sort_index()
+
+        if frame.empty:
+            raise ValueError(
+                "No valid scanner-style candles"
+            )
+
+        print("Scanner-style download")
+        print("Total candles:", len(frame))
+        print("Latest raw candle dates:")
+        print(frame[["Close", "Volume"]].tail(5))
+
+        return frame
+
+    downloads.insert(0, scanner_style_download)
+
+
     best = None
 
     for attempt, download in enumerate(
