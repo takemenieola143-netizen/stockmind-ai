@@ -565,3 +565,217 @@ load();
 </script>
 </body>
 </html>
+<section id="ai-v6" style="margin:20px 12px;padding:18px;background:#111827;color:#e5e7eb;border:1px solid #334155;border-radius:16px;font-family:Arial,sans-serif">
+
+<h2 style="color:#38bdf8">
+StockMind AI Intelligence 6.0
+</h2>
+
+<p id="v6-status">Loading AI data...</p>
+
+<label>Select stock</label>
+
+<select id="v6-stock" style="width:100%;padding:12px;margin:10px 0;background:#1e293b;color:white;border:1px solid #475569;border-radius:8px">
+</select>
+
+<div id="v6-predictions"></div>
+
+<h3>Machine Learning Leaderboard</h3>
+
+<select id="v6-horizon" style="width:100%;padding:12px;background:#1e293b;color:white;border-radius:8px">
+<option value="1">1 Trading Day</option>
+<option value="5">5 Trading Days</option>
+<option value="10">10 Trading Days</option>
+<option value="20">20 Trading Days</option>
+</select>
+
+<div id="v6-models"></div>
+
+<p style="font-size:12px;color:#94a3b8">
+Experimental predictions. Historical accuracy does
+not guarantee future returns. Not a trading recommendation.
+</p>
+
+</section>
+
+<script>
+(() => {
+  const el = id => document.getElementById(id);
+  const horizons = [1, 5, 10, 20];
+
+  let stocks = [];
+  let diagnostics = {};
+
+  function escapeHTML(value) {
+    return String(value ?? "N/A")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function number(value, digits = 2) {
+    return value != null && Number.isFinite(Number(value))
+      ? Number(value).toFixed(digits)
+      : "N/A";
+  }
+
+  function percent(value) {
+    return value == null ? "N/A" : number(value) + "%";
+  }
+
+  function renderStock() {
+    const stock = stocks.find(
+      s => s.symbol === el("v6-stock").value
+    );
+
+    if (!stock) return;
+
+    el("v6-predictions").innerHTML = horizons.map(h => {
+      const p = stock["prediction_" + h + "d"] || {};
+      const available = p.status === "Available";
+      const direction = available
+        ? p.direction
+        : "No signal";
+
+      const color = direction === "Bullish"
+        ? "#22c55e"
+        : direction === "Bearish"
+        ? "#ef4444"
+        : "#eab308";
+
+      return `
+        <div style="padding:15px;margin:12px 0;
+        background:#1e293b;border-radius:12px">
+
+        <h3>${h}-Day Prediction</h3>
+
+        <strong style="color:${color}">
+        ${escapeHTML(direction)}
+        </strong>
+
+        <p>Up probability:
+        ${available ? percent(p.up_probability) : "N/A"}</p>
+
+        <p>Model accuracy: ${percent(p.accuracy)}</p>
+
+        <p>Baseline: ${percent(p.baseline_accuracy)}</p>
+
+        <p>Balanced accuracy:
+        ${percent(p.balanced_accuracy)}</p>
+
+        <p>Brier score: ${number(p.brier_score, 4)}</p>
+
+        <p>Test observations:
+        ${escapeHTML(p.test_samples)}</p>
+
+        <small>Models:
+        ${escapeHTML((p.models || []).join(", ") || "None")}
+        </small>
+
+        <p style="color:#94a3b8;font-size:12px">
+        ${available
+          ? "Shared market-model evaluation, not individual-stock accuracy."
+          : "Prediction unavailable or rejected by validation."}
+        </p>
+
+        </div>`;
+    }).join("");
+  }
+
+  function renderModels() {
+    const h = el("v6-horizon").value;
+    const d = diagnostics[h] || {};
+    const rows = d.leaderboard || [];
+    const selected = d.selected_models || [];
+
+    if (!rows.length) {
+      el("v6-models").textContent =
+        "Model evaluation data unavailable.";
+      return;
+    }
+
+    el("v6-models").innerHTML = `
+      <p>Validation status:
+      ${d.reliable === true ? "Passed" : "Not approved"}
+      </p>
+      <p style="font-size:12px">
+      Lower Brier score is better.
+      </p>
+      ` + rows.map((m, i) => `
+        <div style="background:#1e293b;
+        padding:12px;margin:8px 0;border-radius:8px">
+
+        <strong>${i + 1}. ${escapeHTML(m.model)}</strong>
+
+        <p>Brier: ${number(m.brier, 5)}</p>
+
+        <p>Baseline Brier:
+        ${number(m.baseline_brier, 5)}</p>
+
+        <p>Balanced accuracy:
+        ${percent(m.balanced_accuracy == null
+          ? null : m.balanced_accuracy * 100)}</p>
+
+        <small style="color:#38bdf8">
+        ${selected.includes(m.model)
+          ? "Selected for ensemble"
+          : "Not selected"}
+        </small>
+
+        </div>
+      `).join("");
+  }
+
+  async function loadV6() {
+    try {
+      const response = await fetch(
+        "market_data.json?t=" + Date.now(),
+        {cache: "no-store"}
+      );
+
+      if (!response.ok) throw new Error("Data unavailable");
+
+      const data = await response.json();
+
+      if (String(data.version) !== "6.0") {
+        el("v6-status").textContent =
+          "Awaiting Version 6.0 production data.";
+        return;
+      }
+
+      stocks = data.stocks || data.results || [];
+      diagnostics = data.ai_diagnostics || {};
+
+      if (!Array.isArray(stocks)) {
+        throw new Error("Unexpected stock data format");
+      }
+
+      stocks = stocks.filter(s => s && s.symbol)
+        .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+      el("v6-stock").innerHTML = stocks.map(s =>
+        `<option value="${escapeHTML(s.symbol)}">
+        ${escapeHTML(s.symbol)}</option>`
+      ).join("");
+
+      el("v6-status").textContent =
+        stocks.length + " stocks | 4 prediction horizons";
+
+      renderStock();
+      renderModels();
+
+    } catch (error) {
+      el("v6-status").textContent =
+        "Unable to load AI data: " + error.message;
+    }
+  }
+
+  el("v6-stock").addEventListener("change", renderStock);
+  el("v6-horizon").addEventListener("change", renderModels);
+
+  loadV6();
+})();
+</script>
+
