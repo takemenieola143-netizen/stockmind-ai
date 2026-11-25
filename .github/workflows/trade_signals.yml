@@ -3,70 +3,143 @@ name: StockMind AI Trade Signals
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["StockMind AI Scanner"]
+    types: [completed]
+    branches: [main]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: stockmind-trade-signals
+  cancel-in-progress: false
 
 jobs:
   trade-analysis:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Validate agent code
+      - name: Validate agent engine
         run: python -m py_compile trade_agents.py
 
-      - name: Check market data
+      - name: Verify market data
         run: |
           python - <<'PY'
           import json
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
 
           with open("market_data.json") as f:
               data = json.load(f)
 
-          print("Market version:", data.get("version"))
-          print("Stocks:", len(data.get("stocks", [])))
+          assert str(data.get("version")) == "6.0"
+          assert data.get("completed_sessions_only") is True
 
-          assert data.get("stocks"), "No stock data"
+          stocks = data.get("stocks", [])
+          assert len(stocks) >= 2000
 
-          if str(data.get("version")) != "6.0":
-              print("WARNING: Version 6.0 data unavailable")
+          today = datetime.now(
+              ZoneInfo("Asia/Kolkata")
+          ).date().isoformat()
+
+          fresh = sum(
+              s.get("date") == today
+              for s in stocks
+          )
+
+          assert fresh / len(stocks) >= 0.90, (
+              "Stale market data. Publishing blocked."
+          )
+
+          print("Market data verified")
+          print("Stocks:", len(stocks))
+          print("Fresh stocks:", fresh)
           PY
 
-      - name: Run nine-agent analysis
+      - name: Run nine-agent decision engine
         run: python trade_agents.py
 
       - name: Verify trading signals
         run: |
           python - <<'PY'
           import json
+          import hashlib
+          from pathlib import Path
 
-          with open("trade_signals.json") as f:
-              data = json.load(f)
+          market_file = Path("market_data.json")
+          market = json.loads(market_file.read_text())
+          signal_file = Path("trade_signals.json")
+          data = json.loads(signal_file.read_text())
 
-          assert data["stocks_analysed"] > 0
+          assert str(data["version"]) == "6.1"
+          assert str(data["source_version"]) == "6.0"
+          assert data["stocks_analysed"] == len(market["stocks"])
 
-          print("Version:", data["version"])
+          allowed = {
+              "BUY WATCHLIST",
+              "EXIT REVIEW",
+              "MONITOR",
+              "WAIT"
+          }
+
+          for stock in data["stocks"]:
+              assert stock["decision"] in allowed
+
+          data["market_sha256"] = hashlib.sha256(
+              market_file.read_bytes()
+          ).hexdigest()
+
+          signal_file.write_text(
+              json.dumps(data, indent=2, allow_nan=False)
+          )
+
+          print("Signal report verified")
           print("Stocks:", data["stocks_analysed"])
-          print("Signal summary:")
 
           for signal, count in data["signal_counts"].items():
               print(signal, count)
-
-          print("Multi-agent test completed")
           PY
 
-      - name: Upload trading signal report
+      - name: Upload research report
         uses: actions/upload-artifact@v4
         with:
           name: stockmind-v61-signals
           path: trade_signals.json
           if-no-files-found: error
+
+      - name: Publish trading signals
+        run: |
+          git config user.name "StockMind AI"
+          git config user.email "actions@users.noreply.github.com"
+
+          git fetch origin main
+
+          if ! git diff --quiet HEAD origin/main -- market_data.json; then
+            echo "Market report changed. Publishing blocked."
+            exit 1
+          fi
+
+          git add trade_signals.json
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Update StockMind AI 6.1 trade signals"
+            git push origin HEAD:main
+          fi
