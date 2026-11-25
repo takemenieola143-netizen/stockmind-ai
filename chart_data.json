@@ -1,7 +1,7 @@
 {
   "symbol": "DIXON",
   "price_date": "2026-11-23",
-  "generated": "2026-11-26T00:25:39.017070+05:30",
+  "generated": "2026-11-26T00:35:03.828327+05:30",
   "close": 13390.0,
   "trend": "Mixed",
   "patterns": [],
@@ -10,15 +10,9 @@
   "relative_volume": 1.293933554741344,
   "atr_14": 366.35714285714283,
   "breakout": false,
-  "reference_plan": {
-    "entry_trigger": 13556.64,
-    "stop_loss": 12568.36,
-    "target": 15533.2,
-    "risk_pct": 7.29,
-    "reward_risk": 2
-  },
+  "reference_plan": null,
   "decision": "WAIT",
-  "reason": "Chart research only; freshness, fundamentals, news and validated trade performance not confirmed",
+  "reason": "Latest expected weekday candle unavailable. Trade levels blocked.",
   "candles": [
     {
       "date": "2026-07-15",
@@ -740,5 +734,7 @@
       "close": 13390.0,
       "volume": 475555.0
     }
-  ]
+  ],
+  "freshness_verified": false,
+  "freshness_reason": "Latest expected weekday candle unavailable"
 }
