@@ -1,7 +1,13 @@
+
 name: StockMind AI Scanner
 
 on:
   workflow_dispatch:
+    inputs:
+      test_v6:
+        description: Test StockMind AI 6.0
+        type: boolean
+        default: true
   schedule:
     - cron: '30 11 * * 1-5'
 
@@ -29,19 +35,46 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy yfinance scikit-learn requests
+          pip install pandas numpy yfinance
+          pip install scikit-learn requests
+          pip install xgboost lightgbm catboost
 
-      - name: Run StockMind AI Scanner
+      - name: Test StockMind AI 6.0
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_v6 }}
+        env:
+          MAX_SYMBOLS: '50'
+          PYTHONUNBUFFERED: '1'
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'
+        run: |
+          python -m py_compile ai_engine.py
+          python upgrade_scanner.py
+          python -m py_compile scanner.py
+          python scanner.py
+
+      - name: Upload test results
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_v6 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockmind-v6-test
+          path: |
+            market_data.json
+            market_data.csv
+
+      - name: Run production scanner
+        if: ${{ github.event_name == 'schedule' || !inputs.test_v6 }}
         env:
           MAX_SYMBOLS: '0'
           PYTHONUNBUFFERED: '1'
         run: python scanner.py
 
       - name: Save market data
+        if: ${{ github.event_name == 'schedule' || !inputs.test_v6 }}
         run: |
           git config user.name "StockMind AI"
           git config user.email "actions@users.noreply.github.com"
-          git add -- '*.json' '*.csv'
+          git add market_data.json market_data.csv
+
           if git diff --cached --quiet; then
             echo "No changes"
           else
