@@ -68,6 +68,76 @@ def analyse_chart(symbol, data, now=None):
     return {'symbol': symbol, 'price_date': data.index[-1].date().isoformat(), 'generated': now.isoformat(), 'close': close, 'trend': trend, 'patterns': patterns, 'support_20d': support, 'resistance_20d': resistance, 'relative_volume': rel_volume, 'atr_14': atr, 'breakout': bool(close > resistance and rel_volume is not None and rel_volume >= 1.5), 'reference_plan': plan, 'decision': 'WAIT', 'reason': 'Chart research only; freshness, fundamentals, news and validated trade performance not confirmed', 'candles': candles}
 
 
+def recover_missing_candle(report, candle,
+                           previous_session,
+                           expected_session, now):
+
+    if candle["symbol"] != report["symbol"]:
+        raise ValueError("Stock symbol mismatch")
+
+    if report["price_date"] != previous_session:
+        raise ValueError("Historical session mismatch")
+
+    if candle["date"] != expected_session:
+        raise ValueError("Unexpected trading date")
+
+    if expected_session <= previous_session:
+        raise ValueError("Invalid session order")
+
+    columns = [
+        "open", "high", "low",
+        "close", "volume"
+    ]
+
+    for key in columns:
+        if not math.isfinite(float(candle[key])):
+            raise ValueError("Invalid candle value")
+
+    if not (
+        0 < candle["low"]
+        <= min(candle["open"], candle["close"])
+        <= max(candle["open"], candle["close"])
+        <= candle["high"]
+        and candle["volume"] >= 0
+    ):
+        raise ValueError("Invalid candle structure")
+
+    rows = list(report["candles"])
+
+    rows.append({
+        "date": candle["date"],
+        **{k: float(candle[k]) for k in columns}
+    })
+
+    frame = pd.DataFrame(rows)
+
+    frame["date"] = pd.to_datetime(frame["date"])
+
+    frame = frame.set_index("date")
+
+    frame.columns = [
+        col.capitalize() for col in frame.columns
+    ]
+
+    result = analyse_chart(
+        report["symbol"], frame, now
+    )
+
+    if result["price_date"] != expected_session:
+        raise ValueError("Recovery unsuccessful")
+
+    result["recovered_candle"] = True
+    result["freshness_verified"] = False
+    result["reference_plan"] = None
+    result["decision"] = "WAIT"
+    result["reason"] = (
+        "Candle recovered. Verification pending."
+    )
+
+    return result
+
+
+
 def verify_freshness(result, market, now):
     from datetime import timedelta
 
