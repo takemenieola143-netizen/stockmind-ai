@@ -68,11 +68,194 @@ def analyse_chart(symbol, data, now=None):
     return {'symbol': symbol, 'price_date': data.index[-1].date().isoformat(), 'generated': now.isoformat(), 'close': close, 'trend': trend, 'patterns': patterns, 'support_20d': support, 'resistance_20d': resistance, 'relative_volume': rel_volume, 'atr_14': atr, 'breakout': bool(close > resistance and rel_volume is not None and rel_volume >= 1.5), 'reference_plan': plan, 'decision': 'WAIT', 'reason': 'Chart research only; freshness, fundamentals, news and validated trade performance not confirmed', 'candles': candles}
 
 
+def verify_freshness(result, market, now):
+    from datetime import timedelta
+
+    expected = now.date()
+
+    if now.time() < time(16, 0):
+        expected -= timedelta(days=1)
+
+    while expected.weekday() >= 5:
+        expected -= timedelta(days=1)
+
+    stock = next(
+        (s for s in market.get('stocks', [])
+         if s.get('symbol') == result['symbol']),
+        None
+    )
+
+    if (
+        not stock
+        or market.get('completed_sessions_only')
+        is not True
+    ):
+        return False, 'Completed scanner data unavailable'
+
+    if result['price_date'] != expected.isoformat():
+        return False, 'Latest expected weekday candle unavailable'
+
+    if stock.get('date') != result['price_date']:
+        return False, 'Chart and scanner dates differ'
+
+    try:
+        price = float(stock['price'])
+
+        if (
+            not math.isfinite(price)
+            or abs(price - result['close']) > 0.05
+        ):
+            return False, 'Chart and scanner closing prices differ'
+
+    except (KeyError, TypeError, ValueError):
+        return False, 'Scanner price unavailable'
+
+    return True, 'Chart matches expected weekday and scanner'
+
+
 if __name__ == '__main__':
+
+    from datetime import timedelta
     import yfinance as yf
-    symbol = (sys.argv[1] if len(sys.argv) > 1 else 'DIXON').upper()
-    ticker = symbol if symbol.endswith('.NS') else symbol + '.NS'
-    data = yf.download(ticker, period='1y', interval='1d', auto_adjust=False, progress=False, threads=False)
-    result = analyse_chart(symbol, data)
-    Path('chart_data.json').write_text(json.dumps(result, indent=2, allow_nan=False), encoding='utf-8')
-    print('Chart report saved:', symbol, result['price_date'])
+
+    now = datetime.now(
+        ZoneInfo('Asia/Kolkata')
+    )
+
+    symbol = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else 'DIXON'
+    ).strip().upper()
+
+    symbol = symbol.removesuffix('.NS')
+    ticker = symbol + '.NS'
+
+    try:
+        market = json.loads(
+            Path('market_data.json').read_text(
+                encoding='utf-8'
+            )
+        )
+    except (OSError, ValueError):
+        market = {}
+
+    downloads = [
+
+        lambda: yf.download(
+            ticker,
+            period='1y',
+            interval='1d',
+            auto_adjust=False,
+            progress=False,
+            threads=False
+        ),
+
+        lambda: yf.download(
+            ticker,
+            start=(
+                now.date()-timedelta(days=365)
+            ).isoformat(),
+            end=(
+                now.date()+timedelta(days=1)
+            ).isoformat(),
+            interval='1d',
+            auto_adjust=False,
+            progress=False,
+            threads=False
+        ),
+
+        lambda: yf.Ticker(ticker).history(
+            period='6mo',
+            interval='1d',
+            auto_adjust=False
+        )
+    ]
+
+    best = None
+
+    for attempt, download in enumerate(
+        downloads, 1
+    ):
+
+        try:
+
+            result = analyse_chart(
+                symbol, download(), now
+            )
+
+            verified, reason = verify_freshness(
+                result, market, now
+            )
+
+            print(
+                'Attempt:', attempt,
+                result['price_date'], reason
+            )
+
+            if (
+                best is None
+                or result['price_date']
+                >= best['price_date']
+            ):
+                best = result
+
+            if verified:
+                best = result
+                break
+
+        except Exception as error:
+
+            print(
+                'Attempt failed:',
+                attempt,
+                str(error)
+            )
+
+    if best is None:
+        raise RuntimeError(
+            'No usable chart data received'
+        )
+
+    verified, reason = verify_freshness(
+        best, market, now
+    )
+
+    best['freshness_verified'] = verified
+    best['freshness_reason'] = reason
+    best['decision'] = 'WAIT'
+
+    if not verified:
+
+        best['reference_plan'] = None
+
+        best['reason'] = (
+            reason + '. Trade levels blocked.'
+        )
+
+    else:
+
+        best['reason'] = (
+            reason + '. Strategy validation pending.'
+        )
+
+    Path('chart_data.json').write_text(
+        json.dumps(
+            best,
+            indent=2,
+            allow_nan=False
+        ),
+        encoding='utf-8'
+    )
+
+    print(
+        'Chart report saved:',
+        symbol,
+        best['price_date']
+    )
+
+    print(
+        'Freshness verified:',
+        verified,
+        reason
+    )
