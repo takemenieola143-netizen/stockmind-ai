@@ -1,0 +1,116 @@
+
+name: StockMind AI 7.1 Market Chart Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_symbols:
+        description: "100 = Sample test, 0 = Full market"
+        default: "100"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  market-chart-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pandas numpy yfinance
+          pip install scikit-learn requests
+          pip install xgboost lightgbm catboost
+
+      - name: Activate AI 6.0
+        run: python upgrade_scanner.py
+
+      - name: Activate full market charts
+        run: |
+          python market_chart_upgrade.py
+          python -m py_compile scanner.py
+
+      - name: Scan stocks
+        env:
+          MAX_SYMBOLS: ${{ inputs.max_symbols }}
+        run: |
+          rm -f market_data.json market_charts.json
+          python scanner.py
+
+      - name: Verify market charts
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("market_data.json") as f:
+              market = json.load(f)
+
+          with open("market_charts.json") as f:
+              report = json.load(f)
+
+          charts = report["charts"]
+
+          stocks = {
+              s["symbol"]: s
+              for s in market["stocks"]
+          }
+
+          assert report["version"] == "7.1"
+          assert len(stocks) > 0
+          assert len(charts) > 0
+
+          assert len(charts) / len(stocks) >= 0.90
+
+          for symbol, chart in charts.items():
+
+              assert symbol in stocks
+              assert chart["symbol"] == symbol
+              assert chart["decision"] == "WAIT"
+
+              candles = chart["candles"]
+              assert 51 <= len(candles) <= 90
+
+              dates = [c["date"] for c in candles]
+
+              assert dates == sorted(set(dates))
+              assert dates[-1] == chart["price_date"]
+
+              if chart["freshness_verified"]:
+
+                  assert chart["price_date"] == stocks[symbol]["date"]
+
+                  assert abs(
+                      chart["close"]
+                      - stocks[symbol]["price"]
+                  ) <= 0.05
+
+              else:
+                  assert chart["reference_plan"] is None
+
+          print("Stocks scanned:", len(stocks))
+          print("Charts generated:", len(charts))
+          print("Verified charts:",
+                report["freshness_verified"])
+          print("Unverified charts:",
+                report["freshness_unverified"])
+          print("Chart failures:",
+                len(report["failed"]))
+
+          print("MARKET CHART TEST PASSED")
+          PY
