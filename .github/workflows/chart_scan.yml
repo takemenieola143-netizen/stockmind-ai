@@ -11,7 +11,11 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: stockmind-chart
+  cancel-in-progress: false
 
 jobs:
   chart-analysis:
@@ -33,26 +37,58 @@ jobs:
       - name: Validate chart engine
         run: python -m py_compile chart_engine.py
 
-      - name: Analyse stock chart
+      - name: Generate chart analysis
         env:
           STOCK_SYMBOL: ${{ inputs.symbol }}
-        run: python chart_engine.py "$STOCK_SYMBOL"
+        run: |
+          rm -f chart_data.json
+          python chart_engine.py "$STOCK_SYMBOL"
 
-      - name: Display chart analysis
+      - name: Verify chart report
         run: |
           python - <<'PY'
           import json
+          import math
 
           with open("chart_data.json") as f:
               data = json.load(f)
 
-          assert len(data["candles"]) >= 51
+          candles = data["candles"]
 
-          for key, value in data.items():
-              if key != "candles":
-                  print(key, ":", value)
+          assert len(candles) >= 51
 
-          print("Candles:", len(data["candles"]))
+          for c in candles:
+              for k in ["open", "high", "low", "close", "volume"]:
+                  assert math.isfinite(c[k])
+
+              assert c["low"] > 0
+              assert c["high"] >= max(c["open"], c["close"])
+              assert c["low"] <= min(c["open"], c["close"])
+              assert c["volume"] >= 0
+
+          dates = [c["date"] for c in candles]
+
+          assert dates == sorted(set(dates))
+          assert dates[-1] == data["price_date"]
+
+          plan = data.get("reference_plan")
+
+          if plan:
+              assert (
+                  0 < plan["stop_loss"]
+                  < plan["entry_trigger"]
+                  < plan["target"]
+              )
+
+          assert data["decision"] == "WAIT"
+
+          print("Symbol:", data["symbol"])
+          print("Candles:", len(candles))
+          print("Price date:", data["price_date"])
+          print("Trend:", data["trend"])
+          print("Patterns:", data["patterns"])
+          print("Trade plan:", plan)
+          print("Chart report verified")
           PY
 
       - name: Upload chart report
@@ -61,3 +97,17 @@ jobs:
           name: stockmind-v7-chart
           path: chart_data.json
           if-no-files-found: error
+
+      - name: Publish chart to website
+        run: |
+          git config user.name "StockMind AI"
+          git config user.email "actions@users.noreply.github.com"
+
+          git add chart_data.json
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Update StockMind AI 7.0 chart data"
+            git push origin HEAD:main
+          fi
