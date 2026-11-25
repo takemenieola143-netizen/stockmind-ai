@@ -1,0 +1,63 @@
+
+name: StockMind AI Chart Intelligence
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: NSE stock symbol
+        required: true
+        default: 'DIXON'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  chart-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas numpy yfinance
+
+      - name: Validate chart engine
+        run: python -m py_compile chart_engine.py
+
+      - name: Analyse stock chart
+        env:
+          STOCK_SYMBOL: ${{ inputs.symbol }}
+        run: python chart_engine.py "$STOCK_SYMBOL"
+
+      - name: Display chart analysis
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("chart_data.json") as f:
+              data = json.load(f)
+
+          assert len(data["candles"]) >= 51
+
+          for key, value in data.items():
+              if key != "candles":
+                  print(key, ":", value)
+
+          print("Candles:", len(data["candles"]))
+          PY
+
+      - name: Upload chart report
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockmind-v7-chart
+          path: chart_data.json
+          if-no-files-found: error
