@@ -2,7 +2,7 @@ name: StockMind 8.0 Keyless Provider Probe
 on:
   push:
     branches: [stockmind-7-2-dashboard]
-    paths: ['.github/workflows/provider_probe.yml']
+    paths: ['.github/workflows/provider_probe.yml', 'research_scale_test.py', 'bulk_history_test.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,3 +17,18 @@ jobs:
           python-version: '3.11'
       - name: Probe permitted personal-research endpoints
         run: python research_scale_test.py --provider
+  bulk-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install bulk research dependencies
+        run: pip install pandas pyarrow huggingface_hub
+      - name: Validate real market history (aggregate results only)
+        run: python bulk_history_test.py
