@@ -26,7 +26,8 @@ test("company research scripts parse and key is not persisted",()=>{
  const html=fs.readFileSync("company_research.html","utf8");
  for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){if(m[1].trim())new vm.Script(m[1]);}
  assert.match(html,/type="password"/);
- assert.doesNotMatch(html,/localStorage|sessionStorage|document\.cookie/);
+ assert.doesNotMatch(html,/localStorage|document\.cookie|sessionStorage\.setItem|recordObservation\([^\n]*\bkey\b/);
+ assert.match(html,/recordObservation\(sessionStorage,s,k,label\)/);
 });
 
 test("ticker news fallback verifies symbol, dates and links",()=>{

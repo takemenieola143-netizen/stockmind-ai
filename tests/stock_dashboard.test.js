@@ -91,7 +91,7 @@ test("stock changes cannot show an earlier asynchronous chart", async()=>{
   };
   vm.runInNewContext(code,{StockMindDashboard:h,document:{
     getElementById:el,createElement:()=>new Elem(),createElementNS:()=>new Elem(),body:new Elem()
-  },fetch:fakeFetch,AbortController,console});
+  },fetch:fakeFetch,AbortController,URLSearchParams,console});
   const tick=()=>new Promise(r=>setImmediate(r));
   await tick();await tick();
   assert.ok(resolveDixon);
@@ -123,4 +123,36 @@ test("personal chart validates provider identity and never enables trade levels"
   assert.throws(()=>h.personalChart(p,"DIXON","2026-11-25"));
   assert.throws(()=>h.personalChart(p,"TCS","2026-11-23"));
   assert.throws(()=>h.personalChart({...p,data:[...p.data,p.data[1]]},"TCS","2026-11-25"));
+});
+
+test("raw chart indicators, hypothetical risk gate, and unvalidated model reason",()=>{
+  const candles=Array.from({length:60},(_,i)=>({date:new Date(Date.parse("2026-11-25")-(59-i)*86400000).toISOString().slice(0,10),open:100+i*.1,high:101+i*.1,low:99+i*.1,close:100.5+i*.1,volume:i===59?2000:1000}));
+  const report={symbol:"TCS",price_date:candles.at(-1).date,close:candles.at(-1).close,candles};
+  const a=h.chartInsights(report,"TCS");
+  assert.match(a.trend,/Upward/);assert.equal(a.relative_volume,2);assert.equal(a.paper.reward_risk,2);
+  assert.ok(a.paper.stop_loss<a.paper.entry_trigger&&a.paper.entry_trigger<a.paper.target);
+  assert.throws(()=>h.chartInsights(report,"INFY"));
+  const extreme={...report,candles:candles.map((c,i)=>i===58?{...c,low:1}:c)};
+  assert.equal(h.chartInsights(extreme,"TCS").paper,null);
+  const m=h.modelEvidence({prediction_5d:{status:"No signal",reason:"No model beat validation baseline"}},{"5":{selected_models:[]}},5);
+  assert.equal(m.probability,null);assert.match(m.reason,/baseline/);
+  const unapproved=h.modelEvidence({prediction_1d:{status:"Available",up_probability:80}},{"1":{reliable:false}},1);
+  assert.equal(unapproved.probability,null);
+});
+test("published scanner automatically yields reports without inventing financials",()=>{
+  const report=h.scannerReport({completed_sessions_only:true,stocks:[{symbol:"TCS",price:100,date:"2026-11-25",score:80,backtest_return:5,backtest_trades:12}],ai_diagnostics:{}});
+  assert.equal(report.length,1);assert.equal(report[0].backtest.return_pct,5);
+  assert.equal(report[0].fundamental.status,"ON_DEMAND");assert.equal(report[0].decision,"WAIT");
+  assert.equal(report[0].probabilities["10"],null);
+});
+test("long-history scenarios and private observation expiry",()=>{
+  const candles=Array.from({length:420},(_,i)=>({date:new Date(Date.parse("2026-11-25")-(419-i)*86400000).toISOString().slice(0,10),open:100+i*.01,high:101+i*.01,low:99+i*.01,close:100.5+i*.01,volume:1000}));
+  const result=h.historicalScenarios({meta:{symbol:"TCS",exchange:"NSE"},data:candles},"TCS","2026-11-25");
+  assert.equal(result.ranges["20"].status,"HISTORICAL_SCENARIO");
+  assert.ok(result.ranges["20"].low<=result.ranges["20"].high);
+  const map=new Map(),storage={setItem:(k,v)=>map.set(k,v),getItem:k=>map.get(k)};
+  h.recordObservation(storage,"TCS","financials","retrieved",1000);
+  assert.equal(h.observation(storage,"TCS","financials",2000),"retrieved");
+  assert.equal(h.observation(storage,"INFY","financials",2000),null);
+  assert.equal(h.observation(storage,"TCS","financials",1000+86400001),null);
 });

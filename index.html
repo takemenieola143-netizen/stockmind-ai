@@ -30,8 +30,8 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #334155}
 main{padding:12px;max-width:900px}
 h1{font-size:25px;margin:8px 0}h2{font-size:21px;margin:6px 0 12px}h3{font-size:17px}
 section{margin:10px 0!important;padding:14px!important}
-#app-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;position:sticky;top:0;z-index:20;background:#0b1120;padding:8px 0}
-#app-nav a{display:flex;align-items:center;justify-content:center;text-align:center;margin:0;min-height:42px;padding:7px 4px;border:1px solid #334155;border-radius:9px;text-decoration:none;color:#cbd5e1;font-size:13px}
+#app-nav{display:flex;overflow-x:auto;gap:6px;position:sticky;top:0;z-index:20;background:#0b1120;padding:8px 0;scrollbar-width:thin}
+#app-nav a{flex:0 0 auto;white-space:nowrap;display:flex;align-items:center;justify-content:center;text-align:center;margin:0;min-height:42px;padding:7px 12px;border:1px solid #334155;border-radius:9px;text-decoration:none;color:#cbd5e1;font-size:13px}
 #app-nav a[aria-current="page"]{background:#1b4d43;color:#a7f3d0;border-color:#6ee7b7;font-weight:bold}
 #chart-v7 .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 #chart-v7 .metric p,#chart-v7 .grid p{margin:4px 0;font-size:15px;overflow-wrap:anywhere}
@@ -46,13 +46,13 @@ section{margin:10px 0!important;padding:14px!important}
 </head>
 <body>
 <main>
-<h1>StockMind AI 8.1</h1>
+<h1>StockMind AI 8.2</h1>
 <p style="margin:4px 0;font-size:13px">NSE research · Daily data · Experimental models</p>
 
 <nav id="app-nav" aria-label="App sections">
 <a href="#chart-v7">Stock research</a><a href="#market">Market</a><a href="#scanner">Scanner</a>
 <a href="#ai-v6">AI models</a><a href="#trade-v61">Signals</a><a href="#paper">Portfolio</a>
-<a href="company_research.html">Fundamentals &amp; News</a><a href="research.html">Research reports</a>
+<a href="company_research.html">Fundamentals &amp; News</a><a id="app-report-link" href="research.html">Research reports</a>
 </nav>
 
 <section id="market">
@@ -651,6 +651,8 @@ not guarantee future returns. Not a trading recommendation.
       const direction = available
         ? p.direction
         : "No signal";
+      const d=diagnostics[String(h)]||{},e=d.evaluation||{};
+      const why=p.reason||(d.reliable===false?"Model failed final holdout validation":Array.isArray(d.selected_models)&&!d.selected_models.length?"No model beat the selection baseline":"Prediction unavailable or holdout incomplete");
 
       const color = direction === "Bullish"
         ? "#22c55e"
@@ -668,30 +670,30 @@ not guarantee future returns. Not a trading recommendation.
         ${escapeHTML(direction)}
         </strong>
 
-        <p>Up probability:
-        ${available ? percent(p.up_probability) : "N/A"}</p>
+        <p>${available ? "Up probability: "+percent(p.up_probability) : escapeHTML(why)}</p>
+        <details><summary>Model evaluation (market-wide)</summary>
 
-        <p>Model accuracy: ${percent(p.accuracy)}</p>
+        <p>Model accuracy: ${percent(p.accuracy ?? e.accuracy)}</p>
 
-        <p>Baseline: ${percent(p.baseline_accuracy)}</p>
+        <p>Baseline: ${percent(p.baseline_accuracy ?? e.baseline_accuracy)}</p>
 
         <p>Balanced accuracy:
-        ${percent(p.balanced_accuracy)}</p>
+        ${percent(p.balanced_accuracy ?? e.balanced_accuracy)}</p>
 
-        <p>Brier score: ${number(p.brier_score, 4)}</p>
+        <p>Brier score: ${number(p.brier_score ?? e.brier_score, 4)}</p>
 
         <p>Test observations:
-        ${escapeHTML(p.test_samples)}</p>
+        ${escapeHTML(p.test_samples || e.test_samples || "Not available")}</p>
 
         <small>Models:
-        ${escapeHTML((p.models || []).join(", ") || "None")}
+        ${escapeHTML((p.models?.length ? p.models : d.selected_models || []).join(", ") || "None")}
         </small>
 
         <p style="color:#94a3b8;font-size:12px">
         ${available
           ? "Shared market-model evaluation, not individual-stock accuracy."
           : "Prediction unavailable or rejected by validation."}
-        </p>
+        </p></details>
 
         </div>`;
     }).join("");
@@ -831,7 +833,7 @@ Show more stocks
 <p style="color:#94a3b8;font-size:12px">
 Experimental paper trading research only.
 Signals are not guaranteed forecasts.
-Fundamental and news agents are not yet connected.
+The published signal report does not include private on-demand financial or news data. Open company research for those sources.
 </p>
 
 </section>
@@ -883,6 +885,8 @@ Fundamental and news agents are not yet connected.
       {maximumFractionDigits: 2}
     );
   }
+
+  function personalStatus(symbol,name){try{return globalThis.StockMindDashboard?.observation(sessionStorage,symbol,name==="fundamental"?"financials":"news")||"Not fetched in this session. Open company research.";}catch{return "Not fetched in this session.";}}
 
   function effectiveDecision(s) {
     return stale ? "WAIT" : s.decision;
@@ -977,6 +981,7 @@ Fundamental and news agents are not yet connected.
           </p>
 
           <small>${esc(value.reason)}</small>
+          ${["fundamental","news"].includes(name)?`<p>Personal check: ${esc(personalStatus(s.symbol,name))}</p>`:""}
 
           </div>`
         ).join("");
@@ -1033,9 +1038,8 @@ Fundamental and news agents are not yet connected.
           <p>Risk blocks:
           ${esc(s.risk_blocks)}</p>
 
-          <h3>Individual Agent Analysis</h3>
-
-          ${agents}
+          <details><summary>Individual agent evidence</summary>${agents}</details>
+          <p><a style="color:#7dd3fc" href="company_research.html?symbol=${encodeURIComponent(s.symbol)}">Open financials and news for ${esc(s.symbol)}</a></p>
 
         </details>`;
 
@@ -1173,7 +1177,7 @@ style="width:100%;min-width:300px;background:#0b1120;border-radius:10px">
 <p id="c7-candle"></p>
 
 <details><summary>Chart analysis and indicators</summary><div id="c7-analysis" class="grid"></div></details>
-<details><summary>Trade plan · not validated</summary><p>Entry, target and stop-loss remain unavailable until strategy and data validation pass.</p><div id="c7-plan" class="grid"></div></details>
+<details><summary>Historical paper setup</summary><p id="c7-plan-note">Load a chart to calculate an illustrative rule-based setup. No live trade recommendation.</p><div id="c7-plan" class="grid"></div></details>
 <h3 style="color:#facc15">WAIT · Research only</h3>
 
 <p id="c7-reason">
@@ -1443,6 +1447,7 @@ Not live intraday data.
     el("c7-chart").replaceChildren();
     el("c7-candle").textContent = "";
     el("c7-plan").replaceChildren();
+    el("c7-plan-note").textContent="Load a chart to calculate a historical paper setup.";
     el("c7-analysis").replaceChildren();
     el("c7-range").disabled = true;
     el("c7-levels").disabled = true;
@@ -1454,6 +1459,7 @@ Not live intraday data.
       el("c7-external-chart").href = "https://www.tradingview.com/chart/";
       el("c7-stock-summary").replaceChildren();
       el("c7-stock-predictions").replaceChildren();
+      el("app-report-link").href="research.html";
       el("c7-status").textContent = "No matching stock in published report.";
       el("c7-reason").textContent = "No stock selected.";
       return;
@@ -1461,6 +1467,8 @@ Not live intraday data.
     el("c7-personal").disabled = false;
     el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price) + " (scanner)";
     el("c7-company-link").href = "company_research.html?symbol=" + encodeURIComponent(stock.symbol);
+    try{const f=helpers.observation(sessionStorage,stock.symbol,"financials"),n=helpers.observation(sessionStorage,stock.symbol,"news");el("c7-company-link").textContent=(f?"Financials fetched":"Open financials")+(n?" · News checked":" & news")+" →";}catch{}
+    el("app-report-link").href="research.html?symbol="+encodeURIComponent(stock.symbol);
     el("c7-external-chart").href = "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:"+stock.symbol);
     showFields("c7-stock-summary", [
       ["Scanner price", money(stock.price)],
@@ -1472,8 +1480,10 @@ Not live intraday data.
       ["MACD", number(stock.macd)],
       ["Daily change", number(stock.change,"%")]
     ]);
-    showFields("c7-stock-predictions", [1,5,10,20].map(h =>
-      [h + "-day model", helpers.predictionLabel(stock["prediction_" + h + "d"])]));
+    showFields("c7-stock-predictions", [1,5,10,20].map(h => {
+      const m=helpers.modelEvidence(stock,market.ai_diagnostics,h);
+      return [h+"-day model",m.approved?m.probability.toFixed(1)+"% up probability":m.reason];
+    }));
     el("c7-status").textContent = "Checking historical candles for " + stock.symbol + "…";
     el("c7-reason").textContent = "WAIT — Research only.";
 
@@ -1496,7 +1506,8 @@ Not live intraday data.
   }
 
   function displayChart(data,stock) {
-    report = {...data};
+    const insights=helpers.chartInsights(data,stock.symbol);
+    report = {...data,...insights};
     const verified = helpers.matchesSnapshot(report, stock, market);
     let freshness = verified
       ? "Matches latest published snapshot (not live)"
@@ -1506,12 +1517,13 @@ Not live intraday data.
     el("c7-status").textContent = "Chart close: " + money(report.close) + " · " + report.price_date + " | " + (report.source || "Published chart") + " | " + freshness;
     el("c7-range").disabled = false;
     el("c7-levels").disabled = false;
-      const p = report.reference_plan || {};
+      const p = insights.paper || {};
+      el("c7-plan-note").textContent=report.price_date+" · "+insights.reason+(verified?"":" · Chart not independently freshness-verified.");
 
       showFields("c7-plan",[
-        ["Entry trigger",money(p.entry_trigger),"#38bdf8"],
-        ["Target",money(p.target),"#22c55e"],
-        ["Stop-loss",money(p.stop_loss),"#ef4444"],
+        ["Example entry",money(p.entry_trigger),"#38bdf8"],
+        ["Example target",money(p.target),"#22c55e"],
+        ["Example stop",money(p.stop_loss),"#ef4444"],
         ["Reward / Risk",p.reward_risk
           ? p.reward_risk+":1"
           : "Unavailable"]
@@ -1532,8 +1544,7 @@ Not live intraday data.
           report.breakout
           ? "Detected by chart rule"
           : "Not confirmed"],
-        ["Fundamentals","Open company research for on-demand data"],
-        ["News","Open company research for recent indexed news"]
+        ["ATR (14 sessions)",money(report.atr_14)]
       ]);
 
       el("c7-reason").textContent =
@@ -1557,7 +1568,8 @@ Not live intraday data.
         .sort((a,b) => a.symbol.localeCompare(b.symbol));
       legacyChart = responses[1].status === "fulfilled" ? responses[1].value : null;
       el("c7-search").value = "";
-      renderOptions(legacyChart && legacyChart.symbol, "");
+      const requested=new URLSearchParams(typeof location==="undefined"?"":location.search).get("symbol");
+      renderOptions(requested || (legacyChart && legacyChart.symbol), "");
     } catch(error) {
       el("c7-market-status").textContent = "Unable to load stock list.";
       el("c7-status").textContent = "Chart unavailable.";
