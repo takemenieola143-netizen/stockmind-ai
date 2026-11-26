@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockMind AI 5.0</title>
+<title>StockMind AI 8.0 Research Preview</title>
 <style>
 *{box-sizing:border-box}
 body{background:#0b1120;color:#e2e8f0;font:16px system-ui;margin:0}
@@ -30,13 +30,15 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #334155}
 </head>
 <body>
 <main>
-<h1>StockMind AI 5.0</h1>
+<h1>StockMind AI 8.0 <small>Research Preview</small></h1>
 <p>Indian equity research terminal • Experimental AI models</p>
 
 <nav>
 <a href="#market">Market</a>
 <a href="#scanner">Scanner</a>
 <a href="#paper">Paper Trading</a>
+<a href="research.html">8.0 Research Preview</a>
+<a href="company_research.html">Fundamentals &amp; News</a>
 </nav>
 
 <section id="market">
@@ -1124,14 +1126,23 @@ Fundamental and news agents are not yet connected.
 <section id="chart-v7" style="margin:20px 12px;padding:18px;background:#111827;color:#e5e7eb;border:1px solid #334155;border-radius:16px">
 
 <h2 style="color:#38bdf8">
-StockMind AI 7.0 - Chart Intelligence
+StockMind AI 7.2 - Stock Research Dashboard
 </h2>
 
-<p id="c7-status">Loading chart data...</p>
+<label for="c7-search">Search by stock symbol or available company name</label>
+<input id="c7-search" type="search" placeholder="Search stock (e.g. RELIANCE, TCS)" autocomplete="off" style="width:100%;padding:12px;margin:8px 0;background:#1e293b;color:white;border:1px solid #475569;border-radius:8px">
+<label for="c7-stock">Select stock</label>
+<select id="c7-stock" disabled style="width:100%;padding:12px;background:#1e293b;color:white;border:1px solid #475569;border-radius:8px"></select>
+<p id="c7-market-status" role="status">Loading market report...</p>
+<div id="c7-stock-summary" class="grid"></div>
+<h3>Experimental model estimates</h3>
+<div id="c7-stock-predictions" class="grid"></div>
+<p id="c7-status" role="status">Loading chart data...</p>
 
 <h3 id="c7-symbol"></h3>
+<p><a id="c7-company-link" href="company_research.html" style="color:#7dd3fc">Open company fundamentals and news →</a></p>
 
-<select id="c7-range"
+<select id="c7-range" disabled
 style="width:100%;padding:12px;background:#1e293b;color:white;border-radius:8px">
 
 <option value="30">30 Trading Days</option>
@@ -1142,8 +1153,8 @@ style="width:100%;padding:12px;background:#1e293b;color:white;border-radius:8px"
 
 <p>
 <label>
-<input type="checkbox" id="c7-levels" checked>
-Show entry, target and stop-loss
+<input type="checkbox" id="c7-levels" disabled>
+Show entry, target and stop-loss (disabled during preview)
 </label>
 </p>
 
@@ -1180,12 +1191,19 @@ Not live intraday data.
 
 </section>
 
+<script src="stock_dashboard.js"></script>
 <script>
 (() => {
 
   const el = id => document.getElementById(id);
 
   let report = null;
+  let market = null;
+  let stocks = [];
+  let selection = 0;
+  let controller = null;
+  let legacyChart = null;
+  const helpers = globalThis.StockMindDashboard;
 
   const ns = "http://www.w3.org/2000/svg";
 
@@ -1399,86 +1417,99 @@ Not live intraday data.
     });
   }
 
-  async function loadChart() {
+  function number(v, suffix = "") {
+    return typeof v === "number" && Number.isFinite(v)
+      ? v.toLocaleString("en-IN", {maximumFractionDigits: 2}) + suffix
+      : "Unavailable";
+  }
 
+  async function getJSON(path, signal) {
+    const response = await fetch(path, {cache:"no-store", signal});
+    if (!response.ok) throw new Error("Report unavailable");
+    return response.json();
+  }
+
+  function renderOptions(preferred) {
+    const matching = helpers.filterStocks(stocks, el("c7-search").value);
+    const select = el("c7-stock");
+    select.replaceChildren();
+    matching.forEach(s => {
+      const option = document.createElement("option");
+      option.value = s.symbol;
+      const name = s.name || s.company_name || s.company;
+      option.textContent = s.symbol + (typeof name === "string" ? " — " + name : "");
+      select.appendChild(option);
+    });
+    select.disabled = !matching.length;
+    if (matching.some(s => s.symbol === preferred)) select.value = preferred;
+    el("c7-market-status").textContent = matching.length + " of " + stocks.length +
+      " published stocks | Daily data, not live";
+    renderSelected();
+  }
+
+  async function renderSelected() {
+    const request = ++selection;
+    if (controller) controller.abort();
+    controller = new AbortController();
+    const signal = controller.signal;
+    report = null;
+    el("c7-chart").replaceChildren();
+    el("c7-candle").textContent = "";
+    el("c7-plan").replaceChildren();
+    el("c7-analysis").replaceChildren();
+    el("c7-range").disabled = true;
+    el("c7-levels").disabled = true;
+    const stock = stocks.find(s => s.symbol === el("c7-stock").value);
+    if (!stock) {
+      el("c7-symbol").textContent = "";
+      el("c7-company-link").href = "company_research.html";
+      el("c7-stock-summary").replaceChildren();
+      el("c7-stock-predictions").replaceChildren();
+      el("c7-status").textContent = "No matching stock in published report.";
+      el("c7-reason").textContent = "No stock selected.";
+      return;
+    }
+    el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price);
+    el("c7-company-link").href = "company_research.html?symbol=" + encodeURIComponent(stock.symbol);
+    showFields("c7-stock-summary", [
+      ["Scanner price", money(stock.price)],
+      ["Price date", stock.date || "Unavailable"],
+      ["Technical score", number(stock.score, "/100")],
+      ["RSI", number(stock.rsi)],
+      ["SMA 20", money(stock.sma20)],
+      ["SMA 50", money(stock.sma50)],
+      ["MACD", number(stock.macd)],
+      ["Daily change", number(stock.change,"%")]
+    ]);
+    showFields("c7-stock-predictions", [1,5,10,20].map(h =>
+      [h + "-day model", helpers.predictionLabel(stock["prediction_" + h + "d"])]));
+    el("c7-status").textContent = "Checking historical candles for " + stock.symbol + "…";
+    el("c7-reason").textContent = "WAIT — Research only.";
+
+    let data = null;
     try {
+      data = await getJSON(helpers.chartPath(stock.symbol), signal);
+    } catch(error) {
+      if (signal.aborted) return;
+    }
+    if (request !== selection || signal.aborted) return;
+    if (!helpers.validChart(data,stock.symbol) &&
+        helpers.validChart(legacyChart,stock.symbol)) data = legacyChart;
+    if (!helpers.validChart(data,stock.symbol)) {
+      el("c7-status").textContent = "Historical candles not yet published for " + stock.symbol + ".";
+      el("c7-reason").textContent = "WAIT — Stock-specific chart unavailable; no trade levels.";
+      return;
+    }
 
-      const response = await fetch(
-        "chart_data.json?t="+Date.now(),
-        {cache:"no-store"}
-      );
-
-      if (!response.ok) {
-        throw new Error("Chart report unavailable");
-      }
-
-      const data = await response.json();
-
-      if (
-        !Array.isArray(data.candles) ||
-        data.candles.length < 2 ||
-        !data.candles.every(c =>
-          ["open","high","low","close","volume"]
-          .every(k =>
-            typeof c[k] === "number" &&
-            Number.isFinite(c[k])
-          )
-        )
-      ) {
-        throw new Error("Invalid candle data");
-      }
-
-      report = data;
-
-      el("c7-symbol").textContent =
-        report.symbol + " | " +
-        money(report.close);
-
-      let freshness =
-        "Freshness not verified";
-
-      try {
-
-        const marketResponse = await fetch(
-          "market_data.json?t="+Date.now(),
-          {cache:"no-store"}
-        );
-
-        if (!marketResponse.ok) {
-          throw new Error("Market unavailable");
-        }
-
-        const market = await marketResponse.json();
-
-        const stock = (market.stocks || []).find(
-          s => s.symbol === report.symbol
-        );
-
-        if (
-          stock && stock.date &&
-          report.price_date < stock.date
-        ) {
-
-          freshness =
-            "STALE CHART - newer market data exists";
-
-        } else if (
-          stock &&
-          stock.date === report.price_date &&
-          market.completed_sessions_only === true
-        ) {
-
-          freshness =
-            "Matches published completed-session data";
-
-        }
-
-      } catch(error) {}
-
-      el("c7-status").textContent =
-        "Candle date: " +
-        report.price_date + " | " + freshness;
-
+    report = {...data};
+    const verified = helpers.matchesSnapshot(report, stock, market);
+    let freshness = verified
+      ? "Matches latest published snapshot (not live)"
+      : "Freshness not verified against latest published snapshot";
+    // Keep experimental trading levels disabled during the 7.2 preview.
+    report.reference_plan = null;
+    el("c7-status").textContent = "Candle date: " + report.price_date + " | " + freshness;
+    el("c7-range").disabled = false;
       const p = report.reference_plan || {};
 
       showFields("c7-plan",[
@@ -1505,23 +1536,42 @@ Not live intraday data.
           report.breakout
           ? "Detected by chart rule"
           : "Not confirmed"],
-        ["Fundamentals","Not connected"],
-        ["News","Not connected"]
+        ["Fundamentals","Open company research for on-demand data"],
+        ["News","Open company research for recent indexed news"]
       ]);
 
       el("c7-reason").textContent =
         freshness +
-        ". Chart strategy requires validation.";
+        ". Research only; chart strategy and production data still require validation."
 
-      drawChart();
 
+    drawChart();
+  }
+
+  async function loadChart() {
+    try {
+      if (!helpers) throw new Error("Dashboard helpers unavailable");
+      const responses = await Promise.allSettled([
+        getJSON("market_data.json"), getJSON("chart_data.json")
+      ]);
+      if (responses[0].status !== "fulfilled") throw new Error("Market report unavailable");
+      market = responses[0].value;
+      if (!Array.isArray(market.stocks)) throw new Error("Unexpected market report");
+      stocks = helpers.filterStocks(market.stocks,"")
+        .sort((a,b) => a.symbol.localeCompare(b.symbol));
+      legacyChart = responses[1].status === "fulfilled" ? responses[1].value : null;
+      renderOptions(legacyChart && legacyChart.symbol);
     } catch(error) {
-
-      el("c7-status").textContent =
-        "Awaiting StockMind 7.0 chart report.";
-
+      el("c7-market-status").textContent = "Unable to load stock list.";
+      el("c7-status").textContent = "Chart unavailable.";
+      el("c7-reason").textContent = "WAIT — no verified market report.";
     }
   }
+
+  el("c7-search").addEventListener("input", () => {
+    if (market && helpers) renderOptions(el("c7-stock").value);
+  });
+  el("c7-stock").addEventListener("change", renderSelected);
 
   el("c7-range").addEventListener(
     "change",drawChart
@@ -1535,7 +1585,7 @@ Not live intraday data.
 
   nav.href = "#chart-v7";
 
-  nav.textContent = "AI Chart Intelligence 7.0";
+  nav.textContent = "Stock Research Dashboard 7.2";
 
   nav.style.cssText =
     "display:block;margin:15px;" +

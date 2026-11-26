@@ -2,6 +2,9 @@
 name: StockMind AI 7.1 Market Chart Test
 
 on:
+  push:
+    branches: [stockmind-7-2-dashboard]
+    paths: ['.github/workflows/market_chart_test.yml']
   workflow_dispatch:
     inputs:
       max_symbols:
@@ -48,7 +51,7 @@ jobs:
 
       - name: Scan stocks
         env:
-          MAX_SYMBOLS: ${{ inputs.max_symbols }}
+          MAX_SYMBOLS: ${{ inputs.max_symbols || '100' }}
         run: |
           rm -f market_data.json market_charts.json
           python scanner.py
@@ -132,7 +135,44 @@ jobs:
           PY
           
 
+      - name: Validate dashboard chart export
+        run: |
+          python export_market_charts.py --output preview_charts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m = json.loads(Path("preview_charts/manifest.json").read_text())
+          assert len(list(Path("preview_charts").glob("*.json"))) == m["charts_available"] + 1
+          print("Per-stock dashboard files verified:", m["charts_available"])
+          PY
+
+      - name: Validate StockMind 8.0 research report
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import date
+          from research_engine_v8 import integrate
+          with open("market_data.json") as f:
+              market = json.load(f)
+          with open("market_charts.json") as f:
+              charts = json.load(f)["charts"]
+          with open("research_history.json") as f:
+              historical = json.load(f)
+          asof = date.fromisoformat(max(s["date"] for s in market["stocks"]))
+          report = integrate(market, charts, {}, {}, asof, historical)
+          assert len(report["stocks"]) == len(market["stocks"])
+          assert all(r["decision"] == "WAIT" for r in report["stocks"])
+          assert all(r["fundamental"]["score"] is None for r in report["stocks"])
+          assert all(r["news"]["status"] == "UNKNOWN" for r in report["stocks"])
+          json.dumps(report, allow_nan=False)
+          print("8.0 research records:", len(report["stocks"]))
+          print("Historical strategy tests:", sum(r["backtest"]["status"] == "HISTORICAL_ONLY" for r in report["stocks"]))
+          print("Price scenario records:", sum(any(v["status"] == "HISTORICAL_SCENARIO" for v in r["historical_ranges"].values()) for r in report["stocks"]))
+          print("8.0 research integration checks passed; no data published")
+          PY
+
       - name: Test market-wide candle recovery
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           python - <<'PY'
           import json

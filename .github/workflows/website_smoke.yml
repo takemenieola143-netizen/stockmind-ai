@@ -1,0 +1,71 @@
+name: StockMind 8.0 Public Website Smoke Test
+on:
+  push:
+    branches: [stockmind-7-2-dashboard]
+    paths: ['.github/workflows/website_smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Mobile layout, navigation and private financial import
+        run: |
+          python -m http.server 8000 >/tmp/stockmind-http.log 2>&1 &
+          node - <<'JS'
+          const { chromium }=require("playwright");
+          const assert=require("node:assert/strict");
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            try{
+              const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,deviceScaleFactor:2});
+              const errors=[];
+              page.on("pageerror",e=>errors.push(e.message));
+              await page.goto("http://localhost:8000/index.html");
+              await page.getByRole("link",{name:"Fundamentals & News",exact:true}).click();
+              await page.waitForURL("**/company_research.html");
+              await page.locator("#symbol").fill("TCS");
+              await page.locator("#company").fill("Tata Consultancy Services");
+              await page.locator("#import").setInputFiles({name:"fixture.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify({success:true,trading_symbol:"TCS",company:"Fixture TCS",data:{statement_type:"consolidated",last_updated_at:new Date().toISOString(),top_ratios:{"Stock P/E":"24","ROE":"32%","Current Price":"3000","Book Value":"500"}}}))});
+              await page.waitForFunction(()=>document.querySelector("#financials").innerText.includes("24x"));
+              await page.route("https://api.gdeltproject.org/**",r=>r.fulfill({json:{articles:[{title:"Tata Consultancy Services fixture headline",url:"https://example.com/fixture",seendate:"20261126T080000Z"}]}}));
+              await page.locator("#loadNews").click();
+              await page.waitForFunction(()=>document.querySelector("#news").innerText.includes("fixture headline"));
+              await page.locator("#symbol").fill("INFY");
+              assert.equal(await page.locator("#financials").innerText(),"");
+              assert.equal(await page.locator("#news").innerText(),"");
+              assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+              assert.deepEqual(errors,[]);
+              console.log("Mobile browser smoke test passed; synthetic financial/news fixtures only");
+            }finally{await browser.close();}
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+  live-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe public news provider
+        run: |
+          python - <<'PY'
+          import json
+          from urllib.parse import urlencode
+          from urllib.request import urlopen,Request
+          p={"query":'"Tata Consultancy Services"',"mode":"ArtList","format":"json","maxrecords":"20","timespan":"14d","sort":"DateDesc"}
+          url="https://api.gdeltproject.org/api/v2/doc/doc?"+urlencode(p)
+          with urlopen(Request(url,headers={"User-Agent":"StockMind research probe","Origin":"https://takemenieola143-netizen.github.io"}),timeout=35) as r:
+              data=json.load(r)
+              cors=r.headers.get("Access-Control-Allow-Origin")
+          assert isinstance(data.get("articles"),list), "Unexpected provider response"
+          print("Live news response:",len(data["articles"]),"indexed articles; browser CORS:",cors)
+          assert cors in ("*","https://takemenieola143-netizen.github.io"),"Direct browser access not verified"
+          print("Exact company-name headline matches:",sum("tata consultancy services" in a.get("title","").lower() for a in data["articles"]))
+          PY
