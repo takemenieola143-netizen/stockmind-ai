@@ -1456,6 +1456,7 @@ Not live intraday data.
       el("c7-external-chart").href = "https://www.tradingview.com/chart/";
       el("c7-stock-summary").replaceChildren();
       el("c7-stock-predictions").replaceChildren();
+      el("app-report-link").href="research.html";
       el("c7-status").textContent = "No matching stock in published report.";
       el("c7-reason").textContent = "No stock selected.";
       return;
@@ -1475,8 +1476,10 @@ Not live intraday data.
       ["MACD", number(stock.macd)],
       ["Daily change", number(stock.change,"%")]
     ]);
-    showFields("c7-stock-predictions", [1,5,10,20].map(h =>
-      [h + "-day model", helpers.predictionLabel(stock["prediction_" + h + "d"])]));
+    showFields("c7-stock-predictions", [1,5,10,20].map(h => {
+      const m=helpers.modelEvidence(stock,market.ai_diagnostics,h);
+      return [h+"-day model",m.approved?m.probability.toFixed(1)+"% up probability":m.reason];
+    }));
     el("c7-status").textContent = "Checking historical candles for " + stock.symbol + "…";
     el("c7-reason").textContent = "WAIT — Research only.";
 
@@ -1561,7 +1564,8 @@ Not live intraday data.
         .sort((a,b) => a.symbol.localeCompare(b.symbol));
       legacyChart = responses[1].status === "fulfilled" ? responses[1].value : null;
       el("c7-search").value = "";
-      renderOptions(legacyChart && legacyChart.symbol, "");
+      const requested=new URLSearchParams(typeof location==="undefined"?"":location.search).get("symbol");
+      renderOptions(requested || (legacyChart && legacyChart.symbol), "");
     } catch(error) {
       el("c7-market-status").textContent = "Unable to load stock list.";
       el("c7-status").textContent = "Chart unavailable.";
