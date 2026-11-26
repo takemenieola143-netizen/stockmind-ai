@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockMind AI 8.0 Research Preview</title>
+<title>StockMind AI 8.2 Research</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#0b1120;color:#e2e8f0;font:16px system-ui}
 main{max-width:900px;margin:auto;padding:16px}h1,h2{color:#6ee7b7}a{color:#7dd3fc}
@@ -15,34 +15,34 @@ svg{width:100%;max-width:600px;height:auto;background:#0b1120;border-radius:8px}
 li{margin:6px 0;overflow-wrap:anywhere}
 </style></head><body><main>
 <a href="index.html">← StockMind dashboard</a>
-<h1>StockMind AI 8.0</h1><p>Research preview · daily data · no automated orders</p>
+<h1>StockMind research</h1><p>Research preview · daily data · no automated orders</p>
 <section>
-<h2>Load a local research report</h2>
-<p>Choose a research_v8.json file you are permitted to use. It stays in this browser; no upload to a server.</p>
-<label for="file">Research report</label><input id="file" type="file" accept=".json,application/json">
-<p id="status" role="status">No report loaded. Missing data is never estimated.</p>
+<h2>Choose a stock</h2>
+<p>Published scanner data loads automatically. Optional authorized detailed report imports stay in this browser.</p>
+<details><summary>Import detailed research report (optional)</summary><label for="file">Research report</label><input id="file" type="file" accept=".json,application/json"></details>
+<p id="status" role="status">Loading published scanner report…</p>
 <label for="search">Search symbol</label><input id="search" type="search" placeholder="RELIANCE, TCS…" disabled>
 <label for="stock">Choose stock</label><select id="stock" disabled></select>
 </section>
 <section id="results" hidden>
 <h2 id="symbol"></h2><p class="warn" id="decision"></p>
-<div class="grid" id="summary"></div>
+<div class="grid" id="summary"></div><p><a id="report-company" href="company_research.html">Open company fundamentals and news</a></p><p><a id="report-chart" href="index.html#chart-v7">Open stock chart</a></p>
 <h2>Fundamentals</h2><div class="grid" id="fund"></div><p id="source"></p>
 <h2>AI direction estimates</h2><div class="grid" id="model"></div>
-<h2>Historical price scenarios</h2>
+<details id="scenario-section"><summary>Historical price scenarios and validation</summary>
 <p>10th, 50th and 90th percentiles of non-overlapping historical returns applied to the reference close. Not calibrated future price predictions or guaranteed confidence intervals.</p>
 <svg id="ranges" viewBox="0 0 420 235" role="img" aria-label="Historical scenario price ranges by trading-day horizon"></svg>
 <div class="grid" id="rangeText"></div>
 <h3>Walk-forward scenario validation</h3><p>Observed interval coverage and median error versus a no-change baseline. Historical diagnostics only.</p><div class="grid" id="rangeValidation"></div>
-<h2>Historical strategy test</h2><div class="grid" id="backtest"></div>
-<p>Fixed rule; chronological holdout, next-open execution and same-day exit. Not portfolio-level, forward-tested or adjusted for survivorship bias.</p>
+</details><h2>Historical strategy test</h2><div class="grid" id="backtest"></div>
+<p id="bt-note">Historical research only. No forward profitability claim.</p>
 <h2>Recent disclosures</h2><p id="newsStatus"></p><ul id="news"></ul>
 <h2>Decision blockers</h2><ul id="blocks"></ul>
 </section></main>
-<script>
+<script src="stock_dashboard.js"></script><script>
 "use strict";
 const el=id=>document.getElementById(id);
-let records=[];
+let records=[];let imported=false,loadId=0;
 const finite=n=>typeof n==="number"&&Number.isFinite(n);
 const fmt=(v,s="")=>finite(v)?v.toLocaleString("en-IN",{maximumFractionDigits:2})+s:"Unavailable";
 const money=v=>finite(v)?"₹"+fmt(v):"Unavailable";
@@ -66,17 +66,20 @@ function drawRanges(rows){
 function render(){
  const s=records.find(r=>r.symbol===el("stock").value);el("results").hidden=!s;if(!s)return;
  el("symbol").textContent=s.symbol;el("decision").textContent="WAIT — research only";
+ el("report-company").href="company_research.html?symbol="+encodeURIComponent(s.symbol);el("report-chart").href="index.html?symbol="+encodeURIComponent(s.symbol)+"#chart-v7";
  const f=s.fundamental||{},n=s.news||{},bt=s.backtest||{};
- fields("summary",[["Report session",s.date],["Research rank",fmt(s.research_rank,"/100")],["Fundamental score",fmt(f.score,"/100")]]);
+ fields("summary",[["Report session",s.date],["Scanner price",money(s.price)],["Technical score",fmt(s.technical_score,"/100")],["Research rank",fmt(s.research_rank,"/100")]]);
  fields("fund",[["Status",f.status||"UNKNOWN"],["Sector",f.sector],["Source type",f.source_kind],["Metric basis",f.metric_basis],...Object.entries(f.metrics||{}).map(([k,v])=>[k.replaceAll("_"," ")+" peer percentile",fmt(v)])]);
  el("source").textContent=f.reason||("Financial information available "+(f.available_date||"unknown")+". ");
  const a=safeLink(f.source_url,"View source");if(a)el("source").append(a);
- fields("model",[1,5,10,20].map(h=>[h+" trading days: up probability",fmt((s.probabilities||{})[h],"%")]));
+ fields("model",[1,5,10,20].map(h=>[h+" trading days",finite((s.probabilities||{})[h])?fmt(s.probabilities[h],"%")+" up probability":s.model_evidence?.[h]?.reason||"Not validated"]));
  const ranges=[1,5,10,20].map(h=>[h,(s.historical_ranges||{})[h]]);
+ el("scenario-section").hidden=!imported;
  drawRanges(ranges);
  fields("rangeText",ranges.map(([h,v])=>[h+"D scenario",v?.status==="HISTORICAL_SCENARIO"?money(v.low)+" – "+money(v.high)+" ("+fmt(v.samples)+" samples)":"Unavailable"]));
  fields("rangeValidation",[1,5,10,20].map(h=>{const v=(s.range_validation||{})[h];return [h+"D holdout",v?.status==="HISTORICAL_DIAGNOSTIC"?fmt(v.coverage_pct,"%")+" coverage | median error "+fmt(v.median_mae_pct,"%")+" vs baseline "+fmt(v.no_change_mae_pct,"%")+" | "+fmt(v.samples)+" samples":"Insufficient evidence"];}));
- fields("backtest",[["Status",bt.status],["Net historical return",fmt(bt.return_pct,"%")],["Daily-entry benchmark",fmt(bt.daily_entry_benchmark_pct,"%")],["Max drawdown",fmt(bt.max_drawdown_pct,"%")],["Trades",fmt(bt.trades)],["Round-trip cost",fmt(bt.cost_bps_round_trip," bps")],["Holdout start",bt.holdout_start]]);
+ fields("backtest",[["Status",bt.status],["Net historical return",fmt(bt.return_pct,"%")],["Historical benchmark",fmt(bt.daily_entry_benchmark_pct??bt.benchmark_return_pct,"%")],["Max drawdown",fmt(bt.max_drawdown_pct,"%")],["Trades",fmt(bt.trades)],["Round-trip cost",fmt(bt.cost_bps_round_trip," bps")],["Holdout start",bt.holdout_start]]);
+ el("bt-note").textContent=bt.status==="LEGACY_SCANNER"?"Published scanner backtest (legacy methodology, not cost-adjusted or forward-validated).":"Imported historical research; fixed-rule holdout, not a portfolio or forward test.";
  el("newsStatus").textContent=n.reason||n.status||"UNKNOWN";el("news").replaceChildren();
  for(const item of (Array.isArray(n.items)?n.items:[])){const li=document.createElement("li");li.textContent=String(item.available_date||"")+" — ";const link=safeLink(item.source_url,String(item.headline||"Disclosure"));if(link)li.append(link);else li.append(String(item.headline||"Disclosure"));el("news").append(li);}
  list("blocks",Array.isArray(s.blocks)?s.blocks:["No validated decision"]);
@@ -87,14 +90,15 @@ function options(){
  if([...sel.options].some(o=>o.value===old))sel.value=old;sel.disabled=!sel.options.length;render();
 }
 el("file").addEventListener("change",async()=>{
- records=[];el("results").hidden=true;el("search").disabled=true;el("stock").disabled=true;el("stock").replaceChildren();
+ const id=++loadId;records=[];el("results").hidden=true;el("search").disabled=true;el("stock").disabled=true;el("stock").replaceChildren();
  try{
  const f=el("file").files[0];if(!f)return;if(f.size>30*1024*1024)throw Error("File too large");
  const data=JSON.parse(await f.text());if(data.version!=="8.0-preview"||!Array.isArray(data.stocks))throw Error("Invalid research report");
- records=data.stocks.filter(s=>s&&typeof s.symbol==="string"&&s.decision==="WAIT");
+ if(id!==loadId)return;imported=true;records=data.stocks.filter(s=>s&&typeof s.symbol==="string"&&s.decision==="WAIT");
  el("status").textContent=records.length+" research records · as of "+String(data.as_of||"unknown")+" | information observed "+String(data.information_as_of||data.as_of||"unknown");
  el("search").disabled=false;options();
- }catch(e){el("status").textContent="Report unavailable: "+e.message;}
+ }catch(e){if(id===loadId)el("status").textContent="Report unavailable: "+e.message;}
 });
 el("search").addEventListener("input",options);el("stock").addEventListener("change",render);
+(async()=>{const id=++loadId;try{const r=await fetch("market_data.json",{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);const m=await r.json();if(id!==loadId)return;records=StockMindDashboard.scannerReport(m);imported=false;el("status").textContent=records.length+" published scanner records · Detailed scenarios require authorized history or report import";el("search").disabled=false;options();const symbol=new URLSearchParams(location.search).get("symbol");if(records.some(s=>s.symbol===symbol)){el("stock").value=symbol;render();}}catch(e){if(id===loadId)el("status").textContent="Published scanner report unavailable; optional local import remains available.";}})();
 </script></body></html>
