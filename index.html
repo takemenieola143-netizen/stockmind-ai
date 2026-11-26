@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StockMind AI 5.0</title>
+<title>StockMind AI 8.0 Research Preview</title>
 <style>
 *{box-sizing:border-box}
 body{background:#0b1120;color:#e2e8f0;font:16px system-ui;margin:0}
@@ -30,7 +30,7 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #334155}
 </head>
 <body>
 <main>
-<h1>StockMind AI 5.0</h1>
+<h1>StockMind AI 8.0 <small>Research Preview</small></h1>
 <p>Indian equity research terminal • Experimental AI models</p>
 
 <nav>
@@ -38,6 +38,7 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #334155}
 <a href="#scanner">Scanner</a>
 <a href="#paper">Paper Trading</a>
 <a href="research.html">8.0 Research Preview</a>
+<a href="company_research.html">Fundamentals &amp; News</a>
 </nav>
 
 <section id="market">
@@ -1139,6 +1140,7 @@ StockMind AI 7.2 - Stock Research Dashboard
 <p id="c7-status" role="status">Loading chart data...</p>
 
 <h3 id="c7-symbol"></h3>
+<p><a id="c7-company-link" href="company_research.html" style="color:#7dd3fc">Open company fundamentals and news →</a></p>
 
 <select id="c7-range" disabled
 style="width:100%;padding:12px;background:#1e293b;color:white;border-radius:8px">
@@ -1460,6 +1462,7 @@ Not live intraday data.
     const stock = stocks.find(s => s.symbol === el("c7-stock").value);
     if (!stock) {
       el("c7-symbol").textContent = "";
+      el("c7-company-link").href = "company_research.html";
       el("c7-stock-summary").replaceChildren();
       el("c7-stock-predictions").replaceChildren();
       el("c7-status").textContent = "No matching stock in published report.";
@@ -1467,6 +1470,7 @@ Not live intraday data.
       return;
     }
     el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price);
+    el("c7-company-link").href = "company_research.html?symbol=" + encodeURIComponent(stock.symbol);
     showFields("c7-stock-summary", [
       ["Scanner price", money(stock.price)],
       ["Price date", stock.date || "Unavailable"],
@@ -1532,8 +1536,8 @@ Not live intraday data.
           report.breakout
           ? "Detected by chart rule"
           : "Not confirmed"],
-        ["Fundamentals","Not connected"],
-        ["News","Not connected"]
+        ["Fundamentals","Open company research for on-demand data"],
+        ["News","Open company research for recent indexed news"]
       ]);
 
       el("c7-reason").textContent =
