@@ -112,5 +112,21 @@ jobs:
           print("Chart failures:",
                 len(report["failed"]))
 
+          from collections import Counter
+
+          print("Chart trading dates:",
+                Counter(c["price_date"]
+                        for c in charts.values()))
+
+          print("Scanner trading dates:",
+                Counter(s["date"]
+                        for s in stocks.values()))
+
+          print("Freshness failure reasons:",
+                Counter(c["freshness_reason"]
+                        for c in charts.values()
+                        if not c["freshness_verified"]))
+
+
           print("MARKET CHART TEST PASSED")
           PY
