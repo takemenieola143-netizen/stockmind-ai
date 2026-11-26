@@ -11,6 +11,8 @@ on:
       - export_market_charts.py
       - tests/test_export_market_charts.py
       - research_engine_v8.py
+      - personal_data_adapter.py
+      - tests/test_data_forecasts.py
       - tests/test_research_engine_v8.py
       - market_chart_upgrade.py
       - research.html
@@ -25,6 +27,8 @@ on:
       - export_market_charts.py
       - tests/test_export_market_charts.py
       - research_engine_v8.py
+      - personal_data_adapter.py
+      - tests/test_data_forecasts.py
       - tests/test_research_engine_v8.py
       - market_chart_upgrade.py
       - research.html
