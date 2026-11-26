@@ -1,0 +1,66 @@
+name: StockMind 8.2 research browser validation
+on:
+  push:
+    branches: [stockmind-8-2-research]
+    paths: ['index.html','research.html','stock_dashboard.js','company_research.html','.github/workflows/research_mobile_test.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps webkit
+      - name: Test compact iPhone navigation, published reports and hypothetical chart setup
+        run: |
+          python -m http.server 8000 >/tmp/stockmind-http.log 2>&1 &
+          node - <<'JS'
+          const {webkit,devices}=require("playwright"),assert=require("node:assert/strict"),fs=require("node:fs");
+          (async()=>{
+            const browser=await webkit.launch();
+            try{
+              const page=await browser.newPage({...devices["iPhone 13"]});
+              const errors=[];page.on("pageerror",e=>errors.push(e.message));
+              const market=JSON.parse(fs.readFileSync("market_data.json","utf8"));
+              const count=market.stocks.length;
+              await page.goto("http://localhost:8000/index.html?symbol=TCS#chart-v7");
+              await page.waitForFunction(n=>document.querySelector("#c7-stock").options.length===n,count);
+              assert.equal(await page.locator("#c7-stock").inputValue(),"TCS");
+              await page.locator("#c7-terms summary").click();
+              await page.locator("#c7-consent").check();
+              const candles=Array.from({length:60},(_,i)=>({date:new Date(Date.parse("2026-11-25")-(59-i)*86400000).toISOString().slice(0,10),open:100+i*.1,high:101+i*.1,low:99+i*.1,close:100.5+i*.1,volume:i===59?2000:1000}));
+              await page.route("https://api.tejhq.dev/**",r=>r.fulfill({json:{meta:{symbol:"TCS",exchange:"NSE"},data:candles},headers:{"Access-Control-Allow-Origin":"*"}}));
+              await page.locator("#c7-personal").click();
+              await page.waitForFunction(()=>document.querySelector("#c7-plan").textContent.includes("Example entry"));
+              assert.match(await page.locator("#c7-plan").textContent(),/2:1/);
+              assert.match(await page.locator("#c7-plan-note").textContent(),/Historical rule example/);
+              assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+              await page.locator("#app-report-link").click();
+              await page.waitForURL("**/research.html?symbol=TCS");
+              await page.waitForFunction(n=>document.querySelector("#stock").options.length===n,count);
+              assert.equal(await page.locator("#stock").inputValue(),"TCS");
+              assert.ok(await page.locator("#results").isVisible());
+              assert.match(await page.locator("#status").textContent(),/published scanner records/);
+              await page.locator("#history-options summary").click();
+              await page.locator("#history-consent").check();
+              await page.locator("#history-load").click();
+              await page.waitForFunction(()=>document.querySelector("#history-status").textContent.includes("60 observations"));
+              assert.ok(await page.locator("#scenario-section").isVisible());
+              await page.locator("#report-company").click();
+              await page.waitForURL("**/company_research.html?symbol=TCS");
+              await page.locator("#import").setInputFiles({name:"fixture.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify({success:true,trading_symbol:"TCS",company:"Fixture TCS",data:{statement_type:"consolidated",last_updated_at:new Date().toISOString(),top_ratios:{"Stock P/E":"24","ROE":"32%","Current Price":"3000","Book Value":"500"}}}))});
+              await page.waitForFunction(()=>document.querySelector("#financials").innerText.includes("24x"));
+              const status=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("stockmind-observed:TCS:financials")));
+              assert.match(status.label,/retrieved/);
+              assert.equal(Object.keys(status).sort().join(","),"at,kind,label,symbol");
+              assert.deepEqual(errors,[]);
+              console.log("8.2 mobile research checks passed: "+count+" published stocks; chart and financial fixtures; private status only.");
+            }finally{await browser.close();}
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
