@@ -60,7 +60,7 @@ def fundamentals(record, peers, asof):
 
 def news_review(records, asof):
     # Only dated sourced announcements; no invented sentiment or assumption that silence is good.
-    items = [r for r in records if isinstance(r, dict) and dated_record(r, asof, 14)
+    items = [r for r in (records or []) if isinstance(r, dict) and dated_record(r, asof, 14)
              and isinstance(r.get("headline"), str) and r["headline"].strip()]
     unique = {(r["available_date"], r["source_url"], r["headline"]): r for r in items}
     items = list(unique.values())
@@ -147,11 +147,12 @@ def backtest(candles, asof, cost_bps=20):
             "reason": "No forward validation or delisted-stock universe"}
 
 
-def integrate(market, charts, financials, news, asof):
+def integrate(market, charts, financials, news, asof, historical=None):
+    historical = historical or {}
     if market.get("completed_sessions_only") is not True:
         raise ValueError("Completed session report required")
     records = []
-    peers = list(financials.values())
+    peers = [r for r in financials.values() if isinstance(r, dict)]
     for s in market["stocks"]:
         symbol = s["symbol"]
         c = charts.get(symbol, {})
@@ -164,11 +165,16 @@ def integrate(market, charts, financials, news, asof):
         diagnostics = market.get("ai_diagnostics", {})
         probabilities = {}
         for h in HORIZONS:
-            p = s.get("prediction_"+str(h)+"d", {})
+            p = s.get("prediction_"+str(h)+"d") or {}
             v = num(p.get("up_probability"))
             probabilities[str(h)] = v if fresh and p.get("status") == "Available" and diagnostics.get(str(h),{}).get("reliable") is True and v is not None and 0 <= v <= 100 else None
-        ranges = empirical_ranges(c.get("candles",[]),asof) if fresh else {}
-        bt = backtest(c.get("candles",[]),asof) if fresh else {"status":"UNKNOWN","reason":"Current chart unavailable"}
+        hist = historical.get(symbol, {})
+        if fresh and hist.get("date") == asof.isoformat() and hist.get("symbol") == symbol:
+            ranges = hist.get("historical_ranges", {})
+            bt = hist.get("backtest", {"status":"UNKNOWN"})
+        else:
+            ranges = empirical_ranges(c.get("candles",[]),asof) if fresh else {}
+            bt = backtest(c.get("candles",[]),asof) if fresh else {"status":"UNKNOWN","reason":"Current chart unavailable"}
         blocks = []
         if not fresh: blocks.append("Chart freshness unverified")
         if f["status"] != "AVAILABLE": blocks.append("Fundamentals incomplete")
@@ -197,12 +203,14 @@ if __name__ == "__main__":
     p.add_argument("--charts",default="market_charts.json")
     p.add_argument("--financials")
     p.add_argument("--news")
+    p.add_argument("--historical")
     p.add_argument("--output",default="research_v8.json")
     a=p.parse_args()
     load=lambda x:json.loads(Path(x).read_text(encoding="utf-8"))
     report=integrate(load(a.market),load(a.charts)["charts"],
                      load(a.financials) if a.financials else {},
-                     load(a.news) if a.news else {},date.fromisoformat(a.as_of))
+                     load(a.news) if a.news else {},date.fromisoformat(a.as_of),
+                     load(a.historical) if a.historical else {})
     Path(a.output).write_text(json.dumps(report,allow_nan=False,separators=(",",":")),encoding="utf-8")
     print("8.0 research records:",len(report["stocks"]))
     print("Research ranks available:",sum(x["research_rank"] is not None for x in report["stocks"]))
