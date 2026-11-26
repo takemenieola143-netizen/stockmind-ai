@@ -64,5 +64,21 @@
    }
    return results;
  }
- return {parseRatio,validSymbol,normalizeFinancial,companyPhrase,newsURL,normalizeNews};
+ function normalizeProviderNews(payload,symbol,now=new Date()){
+   if(!validSymbol(symbol)||!payload||payload.trading_symbol!==symbol||!Array.isArray(payload.data))throw Error("Provider news does not match selected stock.");
+   const results=[],seen=new Set();
+   for(const a of payload.data){
+     if(!a||typeof a.heading!=="string"||!finite(a.published_time))continue;
+     const age=now.getTime()-a.published_time;
+     if(age<0||age>14*86400000)continue;
+     try{
+       const u=new URL(a.article_link);if(u.protocol!=="https:"&&u.protocol!=="http:")continue;
+       if(seen.has(u.href))continue;seen.add(u.href);
+       const risk=/\b(fraud|default|probe|penalty|investigation|lawsuit|resignation|downgrade)\b/i.test(a.heading);
+       results.push({title:a.heading.slice(0,300),url:u.href,domain:u.hostname,seen:new Date(a.published_time).toISOString().slice(0,10),topic:risk?"Risk-related words — read source":"Read source"});
+     }catch{}
+   }
+   return results;
+ }
+ return {parseRatio,validSymbol,normalizeFinancial,companyPhrase,newsURL,normalizeNews,normalizeProviderNews};
 });
