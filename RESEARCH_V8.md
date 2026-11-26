@@ -71,3 +71,26 @@ Existing public market data should also be reviewed for compliance.
 Provider information:
 - https://www.nseindia.in/static/market-data/nse-data-policy
 - https://ranaroussi.github.io/yfinance/
+
+
+## Public website: on-demand company research
+
+The new company_research.html page includes an optional personal Fincrux connection
+and a GDELT company-name news search. Fincrux's free Hobby plan is limited; consult
+https://fincrux.org/docs/company-financials and https://fincrux.org/pricing before
+using it. An account and personally authorized API key are needed for live financial
+requests. The browser sends the key only to the documented Fincrux endpoint over
+HTTPS, clears the input after dispatch, and does not store it or publish responses.
+If the provider's CORS policy or rate limits prevent direct requests, import an
+authorized company-financials response locally. Do not put secrets in GitHub.
+
+The news panel searches GDELT on demand and provides original article links and
+index dates. It applies a company-name headline relevance filter, not a verified
+entity-resolution or sentiment classifier. Risk words are cues to read the source,
+not allegations or automatic trade recommendations. GDELT attribution:
+https://www.gdeltproject.org/ (terms: https://gdeltproject.org/about.html).
+The official exchange filing links are available when the news service is down.
+
+Neither feature republishes a collected raw dataset to the repository. No full-market
+fundamental peer scores are enabled without enough comparable, dated data. Public
+historical chart publication remains opt-in and subject to provider/exchange rights.
