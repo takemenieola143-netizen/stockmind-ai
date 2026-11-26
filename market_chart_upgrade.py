@@ -7,7 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from research_engine_v8 import empirical_ranges, backtest
+from research_engine_v8 import empirical_ranges, backtest, validate_ranges
 
 from chart_engine import (
     analyse_chart,
@@ -91,6 +91,7 @@ def collect_historical(stock, df, chart):
         historical[stock["symbol"]] = {
             "symbol": stock["symbol"], "date": stock["date"],
             "historical_ranges": empirical_ranges(candles, session),
+            "range_validation": validate_ranges(candles, session),
             "backtest": backtest(candles, session)
         }
     except (ValueError, TypeError, KeyError, OverflowError):
