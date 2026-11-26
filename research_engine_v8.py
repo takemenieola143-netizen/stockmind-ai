@@ -122,6 +122,40 @@ def empirical_ranges(candles, asof):
     return output
 
 
+def validate_ranges(candles, asof):
+    """Walk-forward validation: each interval uses only returns known at its anchor."""
+    c = clean_candles(candles, asof)
+    prices = [x["close"] for x in c]
+    out = {}
+    for h in HORIZONS:
+        hits, errors, baseline, widths = [], [], [], []
+        start = max(20*h, int(len(prices)*0.6))
+        for i in range(start, len(prices)-h, h):
+            past = [prices[j]/prices[j-h]-1 for j in range(i,h-1,-h)][:250]
+            if len(past)<20: continue
+            low, median, high = (quantile(past,q) for q in (.1,.5,.9))
+            actual = prices[i+h]/prices[i]-1
+            hits.append(low<=actual<=high)
+            errors.append(abs(actual-median))
+            baseline.append(abs(actual))
+            widths.append(high-low)
+        n=len(hits)
+        if n<20:
+            out[str(h)]={"status":"INSUFFICIENT_HOLDOUT","samples":n}
+            continue
+        coverage=statistics.mean(hits)
+        mae=statistics.mean(errors)
+        naive=statistics.mean(baseline)
+        # Diagnostic only. Even passing this threshold does not establish future reliability.
+        out[str(h)]={"status":"HISTORICAL_DIAGNOSTIC","samples":n,
+                      "coverage_pct":round(100*coverage,2),
+                      "median_mae_pct":round(100*mae,3),
+                      "no_change_mae_pct":round(100*naive,3),
+                      "mean_width_pct":round(100*statistics.mean(widths),3),
+                      "screen_passed": .70<=coverage<=.95 and mae<=naive}
+    return out
+
+
 def backtest(candles, asof, cost_bps=20):
     # Fixed rule; signals use only prior closes; next open entry and same-day close exit.
     # Chronological last 30% holdout; not portfolio-level or survivorship-bias corrected.
@@ -179,9 +213,11 @@ def integrate(market, charts, financials, news, asof, historical=None, informati
         if fresh and hist.get("date") == asof.isoformat() and hist.get("symbol") == symbol:
             ranges = hist.get("historical_ranges", {})
             bt = hist.get("backtest", {"status":"UNKNOWN"})
+            range_checks = hist.get("range_validation", {})
         else:
             ranges = empirical_ranges(c.get("candles",[]),asof) if fresh else {}
             bt = backtest(c.get("candles",[]),asof) if fresh else {"status":"UNKNOWN","reason":"Current chart unavailable"}
+            range_checks = validate_ranges(c.get("candles",[]),asof) if fresh else {}
         blocks = []
         if not fresh: blocks.append("Chart freshness unverified")
         if f["status"] != "AVAILABLE": blocks.append("Fundamentals incomplete")
@@ -194,7 +230,7 @@ def integrate(market, charts, financials, news, asof, historical=None, informati
         score = num(s.get("score"))
         rank = round((score+f["score"])/2,2) if fresh and score is not None and 0<=score<=100 and f["score"] is not None else None
         records.append({"symbol":symbol,"date":s.get("date"),"fundamental":f,"news":n,
-                        "probabilities":probabilities,"historical_ranges":ranges,"backtest":bt,
+                        "probabilities":probabilities,"historical_ranges":ranges,"range_validation":range_checks,"backtest":bt,
                         "research_rank":rank,"decision":"WAIT","blocks":blocks})
     records.sort(key=lambda r:(r["research_rank"] is not None,r["research_rank"] or 0),reverse=True)
     return {"version":"8.0-preview","as_of":asof.isoformat(),
