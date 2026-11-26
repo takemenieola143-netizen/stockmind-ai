@@ -47,6 +47,8 @@ jobs:
               const day=stock.date;
               const sample={meta:{symbol:"RELIANCE",exchange:"NSE"},data:Array.from({length:25},(_,i)=>({date:new Date(Date.parse(day)-(24-i)*86400000).toISOString().slice(0,10),open:100,high:110,low:90,close:105,volume:1000}))};
               await page.route("https://api.tejhq.dev/**",r=>r.fulfill({json:sample,headers:{"Access-Control-Allow-Origin":"*"}}));
+              assert.ok((await page.locator("#c7-external-chart").getAttribute("href")).includes("NSE%3ARELIANCE"));
+              await page.locator("#c7-terms summary").click();
               await page.locator("#c7-consent").check();
               await page.locator("#c7-personal").click();
               await page.waitForFunction(()=>document.querySelector("#c7-status").textContent.includes("TejHQ personal EOD data"));
