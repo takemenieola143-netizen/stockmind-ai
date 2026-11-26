@@ -886,6 +886,8 @@ The published signal report does not include private on-demand financial or news
     );
   }
 
+  function personalStatus(symbol,name){try{return globalThis.StockMindDashboard?.observation(sessionStorage,symbol,name==="fundamental"?"financials":"news")||"Not fetched in this session. Open company research.";}catch{return "Not fetched in this session.";}}
+
   function effectiveDecision(s) {
     return stale ? "WAIT" : s.decision;
   }
@@ -979,6 +981,7 @@ The published signal report does not include private on-demand financial or news
           </p>
 
           <small>${esc(value.reason)}</small>
+          ${["fundamental","news"].includes(name)?`<p>Personal check: ${esc(personalStatus(s.symbol,name))}</p>`:""}
 
           </div>`
         ).join("");
@@ -1464,6 +1467,7 @@ Not live intraday data.
     el("c7-personal").disabled = false;
     el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price) + " (scanner)";
     el("c7-company-link").href = "company_research.html?symbol=" + encodeURIComponent(stock.symbol);
+    try{const f=helpers.observation(sessionStorage,stock.symbol,"financials"),n=helpers.observation(sessionStorage,stock.symbol,"news");el("c7-company-link").textContent=(f?"Financials fetched":"Open financials")+(n?" · News checked":" & news")+" →";}catch{}
     el("app-report-link").href="research.html?symbol="+encodeURIComponent(stock.symbol);
     el("c7-external-chart").href = "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:"+stock.symbol);
     showFields("c7-stock-summary", [
