@@ -24,6 +24,12 @@ jobs:
       - name: Install dependencies
         run: pip install pandas numpy
 
+      - name: Test full NSE market
+        run: |
+          python -m py_compile nse_batch.py
+          python nse_batch.py 2026-11-25
+
+
       - name: Test candle recovery
         run: |
           python - <<'PY'
