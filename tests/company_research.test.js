@@ -28,3 +28,11 @@ test("company research scripts parse and key is not persisted",()=>{
  assert.match(html,/type="password"/);
  assert.doesNotMatch(html,/localStorage|sessionStorage|document\.cookie/);
 });
+
+test("ticker news fallback verifies symbol, dates and links",()=>{
+ const now=new Date("2026-11-26T08:00:00Z");
+ const item={heading:"Company update",article_link:"https://example.com/news",published_time:now.getTime()-3600000};
+ const p={trading_symbol:"TCS",data:[item,item,{...item,article_link:"javascript:alert(1)"},{...item,published_time:now.getTime()+1000}]};
+ assert.equal(api.normalizeProviderNews(p,"TCS",now).length,1);
+ assert.throws(()=>api.normalizeProviderNews(p,"INFY",now));
+});
