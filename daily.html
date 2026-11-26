@@ -1,0 +1,49 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>StockMind AI — Daily opportunities</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0b1120;color:#e2e8f0;font:16px system-ui}main{max-width:820px;margin:auto;padding:12px}h1{font-size:24px;color:#6ee7b7;margin:12px 0}h2{font-size:19px;margin:0 0 8px}p{line-height:1.45;color:#b5c3d6}a{color:#7dd3fc}button{font:inherit;padding:12px;border-radius:9px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer}button[aria-pressed=true]{background:#164e45;color:#a7f3d0;border-color:#6ee7b7}nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;position:sticky;top:0;background:#0b1120;padding:8px 0;z-index:1}section,article,details{background:#172235;border:1px solid #334155;border-radius:12px;padding:12px;margin:10px 0}details{background:#111827;padding:10px}summary{cursor:pointer;font-weight:600}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.metric{background:#0b1120;border-radius:8px;padding:10px;overflow-wrap:anywhere}.metric b{display:block;margin-top:5px}.muted,small{color:#aabbd0}.warn{color:#fbbf24}.bar{height:5px;background:#334155;border-radius:4px;overflow:hidden;margin:5px 0}.bar i{display:block;background:#6ee7b7;height:100%}.head{display:flex;justify-content:space-between;align-items:center;gap:8px}ul{padding-left:20px}li{margin:5px 0}button:disabled{opacity:.5}#refresh{width:100%}
+</style></head><body><main>
+<a href="index.html">← StockMind dashboard</a><h1>Daily stock opportunities</h1><p>Three independent research screens · up to five candidates each. No automatic BUY calls.</p>
+<p id="status" role="status">Checking latest published scanner snapshot…</p><button id="refresh">Refresh research data</button>
+<nav aria-label="Research horizon"><button data-kind="intraday" aria-pressed="true">Intraday</button><button data-kind="short" aria-pressed="false">Short-term</button><button data-kind="long" aria-pressed="false">Long-term</button></nav>
+<section id="overview" hidden><h2 id="heading"></h2><p class="warn" id="gate"></p><div id="counts" class="grid"></div><p id="explanation"></p></section><div id="cards"></div>
+<details><summary>How the ranking works</summary><p>Each screen requires price ≥ ₹20, technical score ≥ 65, RSI 45–70, close above SMA50, minimum turnover and maximum ATR risk. Weights are fixed heuristics displayed on each card, not probability of success. Long-term requires independently verified financials and valuation; intraday needs a current-session quote, VWAP, spread and news checks. These are missing. The same stock can qualify for multiple screens. No missing data is replaced with invented evidence.</p><p>We screen the latest available completed weekday snapshot, not a verified exchange holiday calendar. When a snapshot is older than expected, it is clearly historical. Daily refresh depends on the scheduled scanner publishing a valid report; weekends, exchange holidays, source restrictions and failed scans may delay it.</p></details>
+<p><a href="https://www.nseindia.com/companies-listing/corporate-filings-announcements" target="_blank" rel="noopener noreferrer">NSE corporate announcements</a> · <a href="https://www.nseindia.com/companies-listing/corporate-filings-financial-results" target="_blank" rel="noopener noreferrer">NSE financial results</a></p>
+</main><script src="daily_opportunities.js"></script><script>
+"use strict";
+const el=id=>document.getElementById(id),api=StockMindDaily;
+let report=null,kind="intraday",revision=0;
+const fmt=(x,s="")=>typeof x==="number"&&Number.isFinite(x)?x.toLocaleString("en-IN",{maximumFractionDigits:2})+s:"Not available";
+const money=x=>typeof x==="number"&&Number.isFinite(x)?"₹"+fmt(x):"Not available";
+function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function fields(target,rows){const grid=node("div",undefined,"grid");for(const [k,v] of rows){const m=node("div",undefined,"metric");m.append(node("small",k),node("b",v));grid.append(m);}target.append(grid);}
+function detail(target,title){const d=node("details");d.append(node("summary",title));target.append(d);return d;}
+function link(target,label,url){const a=node("a",label);a.href=url;const p=node("p");p.append(a);target.append(p);}
+function render(){
+ el("cards").replaceChildren();el("counts").replaceChildren();el("overview").hidden=!report;
+ if(!report)return;const g=report.groups[kind];el("heading").textContent=g.label+" · "+g.horizon;
+ el("gate").textContent=(report.current?"Latest expected weekday snapshot (holiday calendar not verified).":"HISTORICAL ONLY — expected "+report.expected+", report "+report.latest+".")+" No fully verified buy ideas.";
+ fields(el("counts"),[["Shortlisted",g.rows.length+" / 5"],["Fully verified buys","0"],["Passed technical filter",fmt(g.eligible)],["Matching session coverage",fmt(report.coverage*100,"%")]]);
+ el("explanation").textContent=kind==="intraday"?"Previous-close preparation list. Not a same-day signal.":kind==="short"?"Technical candidates for further 5–20 day research.":"Technical preliminary candidates only — not ranked by company quality or valuation.";
+ g.rows.forEach((r,i)=>{const card=node("article"),head=node("div",undefined,"head");head.append(node("h2",(i+1)+". "+r.symbol),node("strong",fmt(r.score,"/100")));card.append(head,node("small","Research rank score · "+r.date),node("p","Reference close "+money(r.price)+" · RESEARCH ONLY","warn"));
+ fields(card,[["Technical score",fmt(r.technical,"/100")],["RSI",fmt(r.rsi)],["Relative volume",fmt(r.relativeVolume,"x")],["Daily turnover",money(r.turnover/10000000)+" Cr"],["ATR / price",fmt(r.atrPct,"%")],["SMA 50",money(r.sma50)]]);
+ const why=detail(card,"Why shortlisted · score breakdown");
+ for(const p of r.parts){why.append(node("p",p.label+" "+fmt(p.value,"/100")+" · "+fmt(p.weight*100,"% weight")));const bar=node("div",undefined,"bar"),fill=node("i");fill.style.width=p.value+"%";bar.append(fill);why.append(bar);}
+ fields(why,[["SMA 20",money(r.sma20)],["SMA 200",money(r.sma200)]]);
+ if(r.setup){const plan=detail(card,"Historical paper setup (not a buy call)");plan.append(node("p",r.setup.label));fields(plan,[["Example entry",money(r.setup.entry)],["Example stop",money(r.setup.stop)],["Example target",money(r.setup.target)],["Reward/risk",fmt(r.setup.rewardRisk,":1")]]);}
+ const evidence=detail(card,"Model and historical evidence");
+ for(const m of r.models){evidence.append(node("p",m.h+" day: "+(m.probability===null?m.reason:fmt(m.probability,"%")+" up probability; shared model accuracy "+fmt(m.accuracy,"%")+" vs "+fmt(m.baseline,"%")+" baseline")));}
+ if(r.backtest){const b=r.backtest;evidence.append(node("p","Legacy scanner backtest — "+b.method+". Not a horizon-specific or forward validation."));fields(evidence,[["Historical return",fmt(b.return,"%")],["Benchmark return",fmt(b.benchmark,"%")],["Historical trades",fmt(b.trades)],["Max drawdown",fmt(b.drawdown,"%")],["Historical win rate",fmt(b.winRate,"%")],["Assumed cost",fmt(b.cost,"%")]]);}else evidence.append(node("p","Insufficient legacy backtest evidence."));
+ const checks=detail(card,"Missing checks · why not verified");const ul=node("ul");for(const b of r.blockers)ul.append(node("li",b));checks.append(ul);
+ link(card,"Open chart and indicators →","index.html?symbol="+encodeURIComponent(r.symbol)+"#chart-v7");link(card,"Check financials and news →","company_research.html?symbol="+encodeURIComponent(r.symbol));link(card,"Open NSE / TradingView chart →","https://www.tradingview.com/chart/?symbol="+encodeURIComponent("NSE:"+r.symbol));el("cards").append(card);
+ });if(!g.rows.length)el("cards").append(node("p","No stocks met this screen. No picks forced."));
+}
+async function load(){
+ const id=++revision;el("refresh").disabled=true;el("status").textContent="Checking newest published snapshot…";
+ const paths=["https://raw.githubusercontent.com/takemenieola143-netizen/stockmind-ai/main/market_data.json","market_data.json"];
+ let best=null,source="",errors=[];
+ for(const path of paths){try{const r=await fetch(path,{cache:"no-store",credentials:"omit",signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error("HTTP "+r.status);const d=api.daily(await r.json());if(!best||d.latest>best.latest||d.latest===best.latest&&Date.parse(d.generated)>Date.parse(best.generated)){best=d;source=path.startsWith("https:")?"Repository scanner":"Website snapshot";}if(d.current&&path.startsWith("https:"))break;}catch(e){errors.push(e.message);}}
+ if(id!==revision)return;report=best;el("refresh").disabled=false;
+ el("status").textContent=best?source+" · session "+best.latest+" · "+best.connected+" / "+best.requested+" scanned · generated "+new Date(best.generated).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})+" IST"+(errors.length?" · some sources unavailable":""):"No validated snapshot available: "+errors.join("; ");
+ render();
+}
+document.querySelectorAll("button[data-kind]").forEach(b=>b.addEventListener("click",()=>{kind=b.dataset.kind;for(const x of document.querySelectorAll("button[data-kind]"))x.setAttribute("aria-pressed",String(x===b));render();}));el("refresh").addEventListener("click",load);load();
+</script></body></html>
