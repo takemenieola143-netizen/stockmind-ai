@@ -1,0 +1,79 @@
+name: StockMind 9 daily research validation
+on:
+  push:
+    branches: [stockmind-9-daily-opportunities]
+    paths: ['daily.html','daily_opportunities.js','tests/daily_opportunities.test.js','index.html','.github/workflows/daily_test.yml']
+  pull_request:
+    branches: [main]
+    paths: ['daily.html','daily_opportunities.js','tests/daily_opportunities.test.js','index.html','.github/workflows/daily_test.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/*.test.js
+      - name: Verify against actual published stock data
+        run: |
+          node - <<'JS'
+          const fs=require("node:fs"),assert=require("node:assert/strict"),api=require("./daily_opportunities.js");
+          const market=JSON.parse(fs.readFileSync("market_data.json","utf8"));
+          const report=api.daily(market);
+          console.log("Actual scanner:",report.latest,report.connected,"stocks; expected weekday",report.expected,"coverage",report.coverage);
+          for(const [kind,g] of Object.entries(report.groups)){
+            console.log(kind,"eligible",g.eligible,"shortlisted",g.rows.length,"verified",g.verified);
+            assert.ok(g.rows.length<=5);
+            assert.equal(g.verified,0);
+            assert.ok(g.rows.every(x=>x.date===report.latest&&x.status==="RESEARCH ONLY"));
+          }
+          JS
+      - name: Check raw scanner accessibility for daily refresh
+        run: |
+          node - <<'JS'
+          (async()=>{
+            const r=await fetch("https://raw.githubusercontent.com/takemenieola143-netizen/stockmind-ai/main/market_data.json",{headers:{Origin:"https://takemenieola143-netizen.github.io"},signal:AbortSignal.timeout(25000)});
+            if(!r.ok)throw Error("HTTP "+r.status);
+            const cors=r.headers.get("access-control-allow-origin");
+            if(cors!=="*"&&cors!=="https://takemenieola143-netizen.github.io")throw Error("CORS unavailable");
+            const data=await r.json();
+            console.log("Raw scanner accessible:",data.stocks.length,"stocks");
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps webkit
+      - name: Test daily screen on iPhone-like browser
+        run: |
+          python -m http.server 8000 >/tmp/stockmind-http.log 2>&1 &
+          node - <<'JS'
+          const {webkit,devices}=require("playwright"),assert=require("node:assert/strict"),fs=require("node:fs");
+          (async()=>{const browser=await webkit.launch();try{
+            const page=await browser.newPage({...devices["iPhone 13"]}),errors=[];
+            page.on("pageerror",e=>errors.push(e.message));
+            await page.route("https://raw.githubusercontent.com/**",r=>r.abort());
+            await page.goto("http://localhost:8000/daily.html");
+            await page.waitForFunction(()=>!document.querySelector("#overview").hidden);
+            assert.ok(await page.locator("#cards article").count()<=5);
+            for(const k of ["short","long","intraday"]){
+              await page.locator('button[data-kind="'+k+'"]').click();
+              assert.ok(await page.locator("#cards article").count()<=5);
+              assert.match(await page.locator("#gate").innerText(),/No fully verified buy ideas/);
+            }
+            assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+            assert.deepEqual(errors,[]);
+            console.log("Daily research mobile test passed; actual published scanner data; offline raw fallback");
+          }finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1)});
+          JS
