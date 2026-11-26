@@ -13,6 +13,7 @@ on:
       - research_engine_v8.py
       - personal_data_adapter.py
       - tests/test_data_forecasts.py
+      - research_scale_test.py
       - tests/test_research_engine_v8.py
       - market_chart_upgrade.py
       - research.html
@@ -29,6 +30,7 @@ on:
       - research_engine_v8.py
       - personal_data_adapter.py
       - tests/test_data_forecasts.py
+      - research_scale_test.py
       - tests/test_research_engine_v8.py
       - market_chart_upgrade.py
       - research.html
@@ -52,6 +54,8 @@ jobs:
           python-version: '3.11'
       - name: Validate chart export
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify full-universe research capacity (synthetic charts)
+        run: python research_scale_test.py
       - name: Validate JavaScript syntax
         run: node --check stock_dashboard.js
       - name: Run dashboard tests
