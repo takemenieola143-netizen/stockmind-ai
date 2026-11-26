@@ -17,21 +17,23 @@
 <button id="loadFinancial">Fetch company financials</button>
 <label for="import">Or import an authorized Fincrux company-financials JSON response</label><input id="import" type="file" accept=".json,application/json">
 <p id="financeStatus" role="status">No financial source connected. Ratios unavailable until fetched or imported.</p><div class="grid" id="financials"></div>
-<p>Peer-relative scores require comparable records from a sector; use the separate research report page for that analysis. No score is fabricated from one company's ratios.</p>
+<p>Only the source-check status is shared with the research dashboard in this browser session. Your API key and raw results are not stored there.</p><p>Peer-relative scores require comparable records from a sector; use the separate research report page for that analysis. No score is fabricated from one company's ratios.</p>
 </section>
 <section><h2>News intelligence</h2><p>Search recent indexed coverage by company name. Headlines are candidate matches, not verified disclosures or sentiment predictions.</p>
 <button id="loadNews">Search latest news (14 days)</button><button id="providerNews">Fetch ticker news using your Fincrux key</button><p><a id="externalNews" href="https://news.google.com/search?q=Tata%20Consultancy%20Services" target="_blank" rel="noopener noreferrer">Open news search in a separate tab</a></p><p id="newsStatus" role="status">Search to load news.</p><ul id="news"></ul>
 <p>News discovery data: <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer">The GDELT Project</a>. Read articles at their original publishers. Index dates may differ from publication dates.</p>
 </section><p class="warn">Decision: WAIT — independent strategy validation remains required.</p>
-</main><script src="company_research.js"></script><script>
+</main><script src="company_research.js"></script><script src="stock_dashboard.js"></script><script>
 "use strict";
 const el=id=>document.getElementById(id),api=globalThis.CompanyResearch;
 let revision=0, financeRequest=0, newsRequest=0, lastNews=0;
 const symbol=()=>el("symbol").value.trim().toUpperCase();
+function observed(s,k,label){try{StockMindDashboard.recordObservation(sessionStorage,s,k,label);}catch{}}
 function clearFinancial(){financeRequest++;el("financials").replaceChildren();el("financeStatus").textContent="No financial report loaded for this symbol.";}
 function clearNews(){newsRequest++;el("news").replaceChildren();el("newsStatus").textContent="Search to load news.";}
 function showFinancial(payload,s){
  const f=api.normalizeFinancial(payload,s);
+ observed(s,"financials",f.status==="STALE"?"Provider financial response is stale · "+f.day:"Provider financial ratios retrieved · updated "+f.day+" · not independently audited");
  el("financeStatus").textContent=f.company+" | "+f.statement+" | Provider updated "+f.day+" | "+(f.status==="STALE"?"STALE — do not rely on these figures":f.note);
  el("financials").replaceChildren();
  for(const [name,n,suffix] of f.values){const d=document.createElement("div");d.className="metric";const l=document.createElement("small"),b=document.createElement("b");l.textContent=name;b.textContent=n===null?"Unavailable":suffix==="₹"?"₹"+n.toLocaleString("en-IN",{maximumFractionDigits:2}):n.toLocaleString("en-IN",{maximumFractionDigits:2})+suffix;d.append(l,b);el("financials").append(d);}
@@ -81,12 +83,13 @@ el("providerNews").addEventListener("click",async()=>{
    const u=new URL("https://api.fincrux.org/api/news/"+encodeURIComponent(s));u.searchParams.set("api_key",key);u.searchParams.set("page_size","20");
    el("newsStatus").textContent="Requesting ticker news…";
    const response=await fetch(u,{cache:"no-store",credentials:"omit",redirect:"error",referrerPolicy:"no-referrer",signal:AbortSignal.timeout(20000)});
-   if(!response.ok)throw Error("Provider request failed");
+   if(!response.ok)throw Error("HTTP "+response.status);
    const items=api.normalizeProviderNews(await response.json(),s);
    if(request!==newsRequest||version!==revision)return;
+   observed(s,"news",items.length?items.length+" recent ticker-linked articles retrieved; source review required":"Provider returned no recent ticker-linked articles; coverage unknown");
    el("newsStatus").textContent=items.length?items.length+" provider-linked articles. Verify facts at original sources.":"No recent provider results; not proof of no news.";
    for(const item of items){const li=document.createElement("li"),a=document.createElement("a"),m=document.createElement("p");a.href=item.url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=item.title;m.textContent=item.domain+" | Published "+item.seen+" | "+item.topic;li.append(a,m);el("news").append(li);}
- }catch(e){if(request===newsRequest&&version===revision)el("newsStatus").textContent="Ticker news unavailable. Check key or use the external search and official filings.";}
+ }catch(e){if(request===newsRequest&&version===revision)el("newsStatus").textContent="Ticker news unavailable ("+e.message+"). Check key, plan limits or use the external search and official filings.";}
  finally{el("providerNews").disabled=false;}
 });
 const requested=new URLSearchParams(location.search).get("symbol");
