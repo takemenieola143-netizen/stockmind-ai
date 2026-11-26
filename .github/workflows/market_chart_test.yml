@@ -130,3 +130,111 @@ jobs:
 
           print("MARKET CHART TEST PASSED")
           PY
+          
+
+      - name: Test market-wide candle recovery
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          from nse_batch import download_nse_market
+          from chart_engine import recover_missing_candle
+
+          expected = "2026-11-25"
+          previous = "2026-11-23"
+
+          now = datetime.now(
+              ZoneInfo("Asia/Kolkata")
+          )
+
+          with open("market_charts.json") as f:
+              report = json.load(f)
+
+          charts = report["charts"]
+
+          nse = download_nse_market(expected)
+
+          counts = Counter()
+          failures = Counter()
+
+          for symbol, chart in charts.items():
+
+              candle = nse.get(symbol)
+
+              if candle is None:
+                  counts["NSE unavailable"] += 1
+                  continue
+
+              counts["NSE matched"] += 1
+
+              if chart["price_date"] == expected:
+
+                  if abs(
+                      chart["close"] - candle["close"]
+                  ) <= 0.05:
+
+                      counts["Already current"] += 1
+
+                  else:
+                      counts["Price mismatch"] += 1
+
+                  continue
+
+              if chart["price_date"] != previous:
+                  counts["Other trading date"] += 1
+                  continue
+
+              counts["Recovery attempted"] += 1
+
+              try:
+
+                  recovered = recover_missing_candle(
+                      chart,
+                      candle,
+                      previous,
+                      expected,
+                      now
+                  )
+
+                  assert recovered["price_date"] == expected
+
+                  assert abs(
+                      recovered["close"] - candle["close"]
+                  ) <= 0.05
+
+                  assert recovered["recovered_candle"]
+
+                  assert recovered["decision"] == "WAIT"
+
+                  assert recovered["reference_plan"] is None
+
+                  counts["Recovered"] += 1
+
+              except Exception as error:
+
+                  counts["Recovery failed"] += 1
+                  failures[str(error)] += 1
+
+          print("MARKET RECOVERY RESULTS")
+          print("Total charts:", len(charts))
+
+          for key, value in sorted(counts.items()):
+              print(key + ":", value)
+
+          print("Failure reasons:", dict(failures))
+
+          assert counts["NSE matched"] > 0
+
+          assert counts["Recovery failed"] == 0
+
+          assert (
+              counts["Recovered"]
+              == counts["Recovery attempted"]
+          )
+
+          print("MARKET RECOVERY TEST PASSED")
+          PY
+
