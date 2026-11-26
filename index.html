@@ -26,19 +26,33 @@ label{display:block}
 nav a{color:#6ee7b7;margin-right:15px}
 table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:8px;border-bottom:1px solid #334155}
+[hidden]{display:none!important}
+main{padding:12px;max-width:900px}
+h1{font-size:25px;margin:8px 0}h2{font-size:21px;margin:6px 0 12px}h3{font-size:17px}
+section{margin:10px 0!important;padding:14px!important}
+#app-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;position:sticky;top:0;z-index:20;background:#0b1120;padding:8px 0}
+#app-nav a{display:flex;align-items:center;justify-content:center;text-align:center;margin:0;min-height:42px;padding:7px 4px;border:1px solid #334155;border-radius:9px;text-decoration:none;color:#cbd5e1;font-size:13px}
+#app-nav a[aria-current="page"]{background:#1b4d43;color:#a7f3d0;border-color:#6ee7b7;font-weight:bold}
+#chart-v7 .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+#chart-v7 .metric p,#chart-v7 .grid p{margin:4px 0;font-size:15px;overflow-wrap:anywhere}
+#chart-v7 details{padding:10px;margin:10px 0;background:#111827}
+#chart-v7 svg{min-width:0!important}
+#c7-reset{background:#334155;color:#e2e8f0;padding:9px 12px;white-space:nowrap}
+#c7-personal{width:100%;margin:8px 0}
+#c7-terms{font-size:13px}
+#c7-status,#c7-market-status,#c7-reason{font-size:13px;margin:8px 0}
+@media(max-width:480px){main{padding:10px}section{padding:12px!important}#chart-v7 .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
 <main>
-<h1>StockMind AI 8.0 <small>Research Preview</small></h1>
-<p>Indian equity research terminal • Experimental AI models</p>
+<h1>StockMind AI 8.1</h1>
+<p style="margin:4px 0;font-size:13px">NSE research · Daily data · Experimental models</p>
 
-<nav>
-<a href="#market">Market</a>
-<a href="#scanner">Scanner</a>
-<a href="#paper">Paper Trading</a>
-<a href="research.html">8.0 Research Preview</a>
-<a href="company_research.html">Fundamentals &amp; News</a>
+<nav id="app-nav" aria-label="App sections">
+<a href="#chart-v7">Stock research</a><a href="#market">Market</a><a href="#scanner">Scanner</a>
+<a href="#ai-v6">AI models</a><a href="#trade-v61">Signals</a><a href="#paper">Portfolio</a>
+<a href="company_research.html">Fundamentals &amp; News</a><a href="research.html">Research reports</a>
 </nav>
 
 <section id="market">
@@ -86,7 +100,6 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #334155}
 <p id="tradeMsg" role="status"></p>
 <div id="holdings"></div>
 </section>
-</main>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -565,8 +578,6 @@ holdings();
 load();
 
 </script>
-</body>
-</html>
 <section id="ai-v6" style="margin:20px 12px;padding:18px;background:#111827;color:#e5e7eb;border:1px solid #334155;border-radius:16px;font-family:Arial,sans-serif">
 
 <h2 style="color:#38bdf8">
@@ -1113,8 +1124,6 @@ Fundamental and news agents are not yet connected.
   nav.style.cssText =
     "display:block;margin:15px;color:#38bdf8;font-weight:bold";
 
-  document.body.prepend(nav);
-
   loadSignals();
 
 })();
@@ -1126,20 +1135,18 @@ Fundamental and news agents are not yet connected.
 <section id="chart-v7" style="margin:20px 12px;padding:18px;background:#111827;color:#e5e7eb;border:1px solid #334155;border-radius:16px">
 
 <h2 style="color:#38bdf8">
-StockMind AI 7.2 - Stock Research Dashboard
+Stock research
 </h2>
 
 <label for="c7-search">Search by stock symbol or available company name</label>
-<input id="c7-search" type="search" placeholder="Search stock (e.g. RELIANCE, TCS)" autocomplete="off" style="width:100%;padding:12px;margin:8px 0;background:#1e293b;color:white;border:1px solid #475569;border-radius:8px">
+<div style="display:flex;gap:6px;align-items:center"><input id="c7-search" name="stockmind-symbol-query" type="text" placeholder="Search TCS, RELIANCE..." value="" autocomplete="off" autocorrect="off" spellcheck="false" style="width:100%;min-width:0;margin:4px 0"><button id="c7-reset" type="button">All stocks</button></div>
 <label for="c7-stock">Select stock</label>
 <select id="c7-stock" disabled style="width:100%;padding:12px;background:#1e293b;color:white;border:1px solid #475569;border-radius:8px"></select>
 <p id="c7-market-status" role="status">Loading market report...</p>
-<div id="c7-stock-summary" class="grid"></div>
-<h3>Experimental model estimates</h3>
-<div id="c7-stock-predictions" class="grid"></div>
-<p id="c7-status" role="status">Loading chart data...</p>
-
 <h3 id="c7-symbol"></h3>
+<div id="c7-stock-summary" class="grid"></div>
+<details><summary>AI model estimates (1, 5, 10, 20 days)</summary><div id="c7-stock-predictions" class="grid"></div></details>
+<p id="c7-status" role="status">Loading chart data...</p>
 <p><a id="c7-company-link" href="company_research.html" style="color:#7dd3fc">Open company fundamentals and news →</a></p>
 
 <select id="c7-range" disabled
@@ -1151,12 +1158,10 @@ style="width:100%;padding:12px;background:#1e293b;color:white;border-radius:8px"
 
 </select>
 
-<p>
-<label>
-<input type="checkbox" id="c7-levels" disabled>
-Show entry, target and stop-loss (disabled during preview)
-</label>
-</p>
+<p><a id="c7-external-chart" href="https://www.tradingview.com/chart/" target="_blank" rel="noopener noreferrer" style="color:#7dd3fc">Open selected stock chart on TradingView ↗</a></p>
+<details id="c7-terms"><summary>More chart data options</summary><label><input type="checkbox" id="c7-consent"> I agree to <a href="https://tejhq.dev/data-terms" target="_blank" rel="noopener noreferrer">TejHQ data terms</a> for personal research.</label>
+<button id="c7-personal" type="button">Try personal chart provider (free)</button><small>Direct daily data request; provider may deny browser access. Raw prices may jump on corporate actions. No public data upload.</small><label for="c7-import">Import authorized TejHQ OHLCV JSON (optional)</label><input type="file" id="c7-import" accept=".json,application/json" style="width:100%"></details>
+<p><label><input type="checkbox" id="c7-levels" checked disabled> Show support and resistance</label></p>
 
 <div style="overflow-x:auto">
 <svg id="c7-chart"
@@ -1167,17 +1172,9 @@ style="width:100%;min-width:300px;background:#0b1120;border-radius:10px">
 
 <p id="c7-candle"></p>
 
-<div id="c7-plan"
-style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-</div>
-
-<h3>AI Chart Analysis</h3>
-
-<div id="c7-analysis"></div>
-
-<h3>Final Decision</h3>
-
-<h2 style="color:#facc15">WAIT</h2>
+<details><summary>Chart analysis and indicators</summary><div id="c7-analysis" class="grid"></div></details>
+<details><summary>Trade plan · not validated</summary><p>Entry, target and stop-loss remain unavailable until strategy and data validation pass.</p><div id="c7-plan" class="grid"></div></details>
+<h3 style="color:#facc15">WAIT · Research only</h3>
 
 <p id="c7-reason">
 Research only. Trading strategy not yet validated.
@@ -1255,19 +1252,10 @@ Not live intraday data.
 
     const plan = report.reference_plan || {};
 
-    const levels = [
+    const levels = el("c7-levels").checked ? [
       ["Support",report.support_20d,"#facc15"],
       ["Resistance",report.resistance_20d,"#a78bfa"]
-    ];
-
-    if (el("c7-levels").checked) {
-
-      levels.push(
-        ["Entry",plan.entry_trigger,"#38bdf8"],
-        ["Target",plan.target,"#22c55e"],
-        ["Stop",plan.stop_loss,"#ef4444"]
-      );
-    }
+    ] : [];
 
     const validLevels = levels.filter(
       a => typeof a[1] === "number"
@@ -1425,12 +1413,12 @@ Not live intraday data.
 
   async function getJSON(path, signal) {
     const response = await fetch(path, {cache:"no-store", signal});
-    if (!response.ok) throw new Error("Report unavailable");
+    if (!response.ok) throw new Error("Report unavailable (HTTP "+response.status+")");
     return response.json();
   }
 
-  function renderOptions(preferred) {
-    const matching = helpers.filterStocks(stocks, el("c7-search").value);
+  function renderOptions(preferred, query = el("c7-search").value) {
+    const matching = helpers.filterStocks(stocks, query);
     const select = el("c7-stock");
     select.replaceChildren();
     matching.forEach(s => {
@@ -1442,8 +1430,7 @@ Not live intraday data.
     });
     select.disabled = !matching.length;
     if (matching.some(s => s.symbol === preferred)) select.value = preferred;
-    el("c7-market-status").textContent = matching.length + " of " + stocks.length +
-      " published stocks | Daily data, not live";
+    el("c7-market-status").textContent = matching.length + " of " + stocks.length + " stocks" + (query.trim() ? " match search · Tap All stocks to reset" : " available · Search to narrow list");
     renderSelected();
   }
 
@@ -1459,18 +1446,22 @@ Not live intraday data.
     el("c7-analysis").replaceChildren();
     el("c7-range").disabled = true;
     el("c7-levels").disabled = true;
+    el("c7-personal").disabled = true;
     const stock = stocks.find(s => s.symbol === el("c7-stock").value);
     if (!stock) {
       el("c7-symbol").textContent = "";
       el("c7-company-link").href = "company_research.html";
+      el("c7-external-chart").href = "https://www.tradingview.com/chart/";
       el("c7-stock-summary").replaceChildren();
       el("c7-stock-predictions").replaceChildren();
       el("c7-status").textContent = "No matching stock in published report.";
       el("c7-reason").textContent = "No stock selected.";
       return;
     }
-    el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price);
+    el("c7-personal").disabled = false;
+    el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price) + " (scanner)";
     el("c7-company-link").href = "company_research.html?symbol=" + encodeURIComponent(stock.symbol);
+    el("c7-external-chart").href = "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:"+stock.symbol);
     showFields("c7-stock-summary", [
       ["Scanner price", money(stock.price)],
       ["Price date", stock.date || "Unavailable"],
@@ -1501,6 +1492,10 @@ Not live intraday data.
       return;
     }
 
+    displayChart(data,stock);
+  }
+
+  function displayChart(data,stock) {
     report = {...data};
     const verified = helpers.matchesSnapshot(report, stock, market);
     let freshness = verified
@@ -1508,8 +1503,9 @@ Not live intraday data.
       : "Freshness not verified against latest published snapshot";
     // Keep experimental trading levels disabled during the 7.2 preview.
     report.reference_plan = null;
-    el("c7-status").textContent = "Candle date: " + report.price_date + " | " + freshness;
+    el("c7-status").textContent = "Chart close: " + money(report.close) + " · " + report.price_date + " | " + (report.source || "Published chart") + " | " + freshness;
     el("c7-range").disabled = false;
+    el("c7-levels").disabled = false;
       const p = report.reference_plan || {};
 
       showFields("c7-plan",[
@@ -1560,7 +1556,8 @@ Not live intraday data.
       stocks = helpers.filterStocks(market.stocks,"")
         .sort((a,b) => a.symbol.localeCompare(b.symbol));
       legacyChart = responses[1].status === "fulfilled" ? responses[1].value : null;
-      renderOptions(legacyChart && legacyChart.symbol);
+      el("c7-search").value = "";
+      renderOptions(legacyChart && legacyChart.symbol, "");
     } catch(error) {
       el("c7-market-status").textContent = "Unable to load stock list.";
       el("c7-status").textContent = "Chart unavailable.";
@@ -1572,6 +1569,50 @@ Not live intraday data.
     if (market && helpers) renderOptions(el("c7-stock").value);
   });
   el("c7-stock").addEventListener("change", renderSelected);
+  el("c7-reset").addEventListener("click",()=>{
+    el("c7-search").value="";
+    if(market)renderOptions(el("c7-stock").value,"");
+  });
+  el("c7-personal").addEventListener("click",async()=>{
+    const stock=stocks.find(s=>s.symbol===el("c7-stock").value);
+    if(!stock)return;
+    if(!el("c7-consent").checked){el("c7-status").textContent="Confirm personal-use terms above to load this chart.";return;}
+    if(!/^[A-Z0-9][A-Z0-9&-]{0,29}$/.test(stock.symbol)){el("c7-status").textContent="Symbol format not supported by this provider.";return;}
+    const request=++selection;
+    if(controller)controller.abort();
+    controller=new AbortController();
+    const signal=controller.signal;
+    const now=new Date();
+    const to=now.toISOString().slice(0,10);
+    const from=new Date(now.getTime()-160*86400000).toISOString().slice(0,10);
+    el("c7-personal").disabled=true;
+    el("c7-status").textContent="Requesting "+stock.symbol+" daily chart…";
+    try{
+      const url=new URL("https://api.tejhq.dev/v1/ohlcv/nse/"+encodeURIComponent(stock.symbol));
+      url.searchParams.set("from",from);url.searchParams.set("to",to);
+      const data=await getJSON(url.href,signal);
+      if(request!==selection||signal.aborted)return;
+      displayChart(helpers.personalChart(data,stock.symbol,to),stock);
+    }catch(e){
+      if(request===selection&&!signal.aborted)el("c7-status").textContent="Personal chart unavailable — provider or network error. Use the external chart link or authorized file import. Existing chart remains historical.";
+    }finally{if(request===selection)el("c7-personal").disabled=false;}
+  });
+
+  el("c7-import").addEventListener("change",async()=>{
+    const input=el("c7-import"),file=input.files[0],stock=stocks.find(s=>s.symbol===el("c7-stock").value);
+    if(!file||!stock)return;
+    const request=++selection;
+    if(controller)controller.abort();
+    el("c7-personal").disabled=false;
+    try{
+      if(!el("c7-consent").checked)throw Error("Confirm data usage permission");
+      if(file.size>2000000)throw Error("File too large");
+      const payload=JSON.parse(await file.text());
+      if(request!==selection)return;
+      displayChart(helpers.personalChart(payload,stock.symbol,new Date().toISOString().slice(0,10)),stock);
+    }catch(e){if(request===selection)el("c7-status").textContent="Import unavailable: "+e.message;}
+    finally{input.value="";}
+  });
 
   el("c7-range").addEventListener(
     "change",drawChart
@@ -1591,9 +1632,22 @@ Not live intraday data.
     "display:block;margin:15px;" +
     "color:#38bdf8;font-weight:bold";
 
-  document.body.prepend(nav);
-
   loadChart();
 
 })();
 </script>
+
+<script>
+(function(){
+  const ids=["chart-v7","market","scanner","ai-v6","trade-v61","paper"];
+  const links=[...document.querySelectorAll("#app-nav a[href^='#']")];
+  function show(){
+    const hash=location.hash.slice(1),id=ids.includes(hash)?hash:"chart-v7";
+    for(const key of ids)document.getElementById(key).hidden=key!==id;
+    for(const a of links){if(a.getAttribute("href")==="#"+id)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");}
+    window.scrollTo(0,0);
+  }
+  window.addEventListener("hashchange",show);show();
+})();
+</script>
+</main></body></html>

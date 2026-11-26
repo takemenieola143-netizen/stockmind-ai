@@ -42,5 +42,26 @@
     return (typeof p.direction === "string" ? p.direction : "Unknown") +
       " | Up probability " + p.up_probability.toFixed(1) + "%";
   }
-  return {chartPath,filterStocks,validChart,matchesSnapshot,predictionLabel};
+  function personalChart(payload,symbol,to) {
+    if (!payload || payload.meta?.symbol !== symbol ||
+        String(payload.meta?.exchange).toUpperCase() !== "NSE" ||
+        !Array.isArray(payload.data) || !validDate(to)) throw Error("Wrong stock or exchange");
+    const candles = payload.data.filter(c => c && (c.series === undefined || c.series === "EQ"))
+      .map(c => ({date:c.date,open:c.open,high:c.high,low:c.low,close:c.close,volume:c.volume}))
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if (candles.some(c=>!validDate(c.date)||c.date>to) || candles.length<2 ||
+        new Set(candles.map(c=>c.date)).size!==candles.length) throw Error("Invalid candle dates");
+    const last=candles[candles.length-1], prior=candles.slice(-21,-1);
+    const c={symbol,price_date:last.date,close:last.close,candles:candles.slice(-90),
+      source:"TejHQ personal EOD data",freshness_verified:false,reference_plan:null,
+      decision:"WAIT",patterns:[],breakout:false};
+    if (!validChart(c,symbol)) throw Error("Invalid prices");
+    if(prior.length===20){
+      c.support_20d=Math.min(...prior.map(x=>x.low));
+      c.resistance_20d=Math.max(...prior.map(x=>x.high));
+      c.trend="Not evaluated — unadjusted history";
+    }
+    return c;
+  }
+  return {chartPath,filterStocks,validChart,matchesSnapshot,predictionLabel,personalChart};
 });

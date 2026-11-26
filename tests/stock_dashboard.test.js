@@ -95,12 +95,13 @@ test("stock changes cannot show an earlier asynchronous chart", async()=>{
   const tick=()=>new Promise(r=>setImmediate(r));
   await tick();await tick();
   assert.ok(resolveDixon);
+  assert.equal(el("c7-stock").children.length,3);
   el("c7-stock").value="TCS";
   await el("c7-stock").events.change();
   assert.match(el("c7-symbol").textContent,/^TCS/);
-  assert.match(el("c7-status").textContent,/Candle date/);
+  assert.match(el("c7-status").textContent,/Chart close/);
   assert.ok(el("c7-chart").children.length>0);
-  assert.equal(el("c7-levels").disabled,true);
+  assert.equal(el("c7-levels").disabled,false);
   resolveDixon(response(chart("DIXON")));
   await tick();
   assert.match(el("c7-symbol").textContent,/^TCS/);
@@ -109,4 +110,17 @@ test("stock changes cannot show an earlier asynchronous chart", async()=>{
   assert.match(el("c7-status").textContent,/not yet published for RELIANCE/);
   assert.equal(el("c7-chart").children.length,0);
   assert.equal(el("c7-plan").children.length,0);
+  el("c7-search").value="TCS";el("c7-search").events.input();
+  await tick();assert.equal(el("c7-stock").children.length,1);
+  el("c7-reset").events.click();await tick();
+  assert.equal(el("c7-stock").children.length,3);
+});
+
+test("personal chart validates provider identity and never enables trade levels",()=>{
+  const p={meta:{symbol:"TCS",exchange:"NSE"},data:chart().candles};
+  const r=h.personalChart(p,"TCS","2026-11-25");
+  assert.equal(r.close,105);assert.equal(r.freshness_verified,false);assert.equal(r.reference_plan,null);
+  assert.throws(()=>h.personalChart(p,"DIXON","2026-11-25"));
+  assert.throws(()=>h.personalChart(p,"TCS","2026-11-23"));
+  assert.throws(()=>h.personalChart({...p,data:[...p.data,p.data[1]]},"TCS","2026-11-25"));
 });

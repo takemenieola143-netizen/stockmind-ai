@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - stockmind-7-2-dashboard
+      - stockmind-8-1-mobile
     paths:
       - index.html
       - stock_dashboard.js

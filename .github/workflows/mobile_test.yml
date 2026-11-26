@@ -1,0 +1,88 @@
+name: StockMind 8.1 mobile regression
+on:
+  push:
+    branches: [stockmind-8-1-mobile]
+    paths: ['index.html','stock_dashboard.js','.github/workflows/mobile_test.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps webkit
+      - name: Test iPhone-like WebKit layout with published stock list
+        run: |
+          python -m http.server 8000 >/tmp/stockmind-http.log 2>&1 &
+          node - <<'JS'
+          const {webkit,devices}=require("playwright");
+          const assert=require("node:assert/strict");
+          const fs=require("node:fs");
+          (async()=>{
+            const browser=await webkit.launch();
+            try {
+              const page=await browser.newPage({...devices["iPhone 13"]});
+              const errors=[];
+              page.on("pageerror",e=>errors.push(e.message));
+              const market=JSON.parse(fs.readFileSync("market_data.json","utf8"));
+              const count=market.stocks.length;
+              await page.goto("http://localhost:8000/index.html");
+              await page.waitForFunction(n=>document.querySelector("#c7-stock").options.length===n,count);
+              console.log("Initial selector:",count,"stocks");
+              assert.ok(await page.locator("#chart-v7").isVisible());
+              assert.ok(await page.locator("#market").isHidden());
+              await page.locator("#c7-search").fill("TCS");
+              await page.waitForFunction(()=>document.querySelector("#c7-stock").value==="TCS");
+              await page.locator("#c7-reset").click();
+              await page.waitForFunction(n=>document.querySelector("#c7-stock").options.length===n,count);
+              await page.locator("#c7-stock").selectOption("RELIANCE");
+              await page.waitForFunction(()=>document.querySelector("#c7-symbol").textContent.startsWith("RELIANCE"));
+              const stock=market.stocks.find(s=>s.symbol==="RELIANCE");
+              const day=stock.date;
+              const sample={meta:{symbol:"RELIANCE",exchange:"NSE"},data:Array.from({length:25},(_,i)=>({date:new Date(Date.parse(day)-(24-i)*86400000).toISOString().slice(0,10),open:100,high:110,low:90,close:105,volume:1000}))};
+              await page.route("https://api.tejhq.dev/**",r=>r.fulfill({json:sample,headers:{"Access-Control-Allow-Origin":"*"}}));
+              assert.ok((await page.locator("#c7-external-chart").getAttribute("href")).includes("NSE%3ARELIANCE"));
+              await page.locator("#c7-terms summary").click();
+              await page.locator("#c7-consent").check();
+              await page.locator("#c7-personal").click();
+              await page.waitForFunction(()=>document.querySelector("#c7-status").textContent.includes("TejHQ personal EOD data"));
+              assert.equal(await page.locator("#c7-levels").isEnabled(),true);
+              assert.ok(await page.locator("#c7-chart").getByText("Support",{exact:true}).count());
+              await page.locator("#c7-levels").uncheck();
+              assert.equal(await page.locator("#c7-chart").getByText("Support",{exact:true}).count(),0);
+              assert.ok(await page.locator("#c7-reason").innerText().then(s=>s.includes("not verified")));
+              await page.locator("#app-nav a[href='#market']").click();
+              assert.ok(await page.locator("#market").isVisible());
+              assert.ok(await page.locator("#chart-v7").isHidden());
+              await page.locator("#app-nav a[href='#chart-v7']").click();
+              assert.ok(await page.locator("#chart-v7").isVisible());
+              assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+              assert.deepEqual(errors,[]);
+              console.log("Mobile WebKit passed: full list, search/reset, stock selection, chart toggle, tabs and viewport. Chart fixture only.");
+            } finally {await browser.close();}
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify direct browser access to personal chart provider
+        run: |
+          python - <<'PY'
+          import json
+          from urllib.request import urlopen,Request
+          url="https://api.tejhq.dev/v1/ohlcv/nse/RELIANCE?from=2026-07-01&to=2026-11-25"
+          origin="https://takemenieola143-netizen.github.io"
+          with urlopen(Request(url,headers={"Origin":origin,"Accept":"application/json"}),timeout=35) as r:
+              d=json.load(r); cors=r.headers.get("Access-Control-Allow-Origin")
+          assert d["meta"]["symbol"]=="RELIANCE"
+          assert len(d["data"])>=51
+          assert cors in ("*",origin),"Browser CORS unavailable"
+          print("RELIANCE real candles:",len(d["data"]),"CORS:",cors,"latest:",d["data"][-1]["date"])
+          PY
