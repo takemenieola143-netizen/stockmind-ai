@@ -5,6 +5,7 @@ on:
     branches:
       - stockmind-7-2-dashboard
       - stockmind-8-1-mobile
+      - stockmind-8-2-research
     paths:
       - index.html
       - stock_dashboard.js
