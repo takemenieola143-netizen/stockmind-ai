@@ -1,0 +1,19 @@
+name: StockMind 8.0 Keyless Provider Probe
+on:
+  push:
+    branches: [stockmind-7-2-dashboard]
+    paths: ['.github/workflows/provider_probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Probe permitted personal-research endpoints
+        run: python research_scale_test.py --provider
