@@ -6,6 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pandas as pd
+from research_engine_v8 import empirical_ranges, backtest
+
 from chart_engine import (
     analyse_chart,
     verify_freshness
@@ -13,6 +16,7 @@ from chart_engine import (
 
 charts = {}
 failures = {}
+historical = {}
 
 NOW = datetime.now(
     ZoneInfo("Asia/Kolkata")
@@ -58,10 +62,40 @@ def collect_chart(stock, df):
         json.dumps(chart, allow_nan=False)
 
         charts[symbol] = chart
+        collect_historical(stock, df, chart)
 
     except Exception as error:
 
         failures[symbol] = str(error)
+
+
+def collect_historical(stock, df, chart):
+    # Full historical series is used internally only; do not export raw history.
+    if not chart["freshness_verified"]:
+        return
+    try:
+        session = datetime.fromisoformat(stock["date"]).date()
+        frame = df.sort_index().copy()
+        frame = frame[~frame.index.duplicated(keep="last")]
+        frame = frame[frame.index.date <= session]
+        frame = frame.dropna(subset=["Open", "High", "Low", "Close", "Adj Close"])
+        frame = frame[(frame["Close"] > 0) & (frame["Adj Close"] > 0)]
+        if frame.empty or frame.index[-1].date() != session:
+            return
+        factor = frame["Adj Close"] / frame["Close"]
+        # Normalize to the current raw closing-price scale. Avoid split/dividend jumps.
+        factor = factor / factor.iloc[-1]
+        adjusted = frame[["Open","High","Low","Close"]].multiply(factor, axis=0)
+        candles = [{"date": stamp.date().isoformat(), **{k.lower():float(v) for k,v in row.items()}}
+                   for stamp,row in adjusted.tail(1250).iterrows()]
+        historical[stock["symbol"]] = {
+            "symbol": stock["symbol"], "date": stock["date"],
+            "historical_ranges": empirical_ranges(candles, session),
+            "backtest": backtest(candles, session)
+        }
+    except (ValueError, TypeError, KeyError, OverflowError):
+        # Missing adjusted history must not disable chart generation.
+        return
 
 
 def write_chart_reports(results):
@@ -97,6 +131,8 @@ def write_chart_reports(results):
     )
 
     temporary.replace("market_charts.json")
+    Path("research_history.json").write_text(json.dumps(historical, allow_nan=False, separators=(",", ":")), encoding="utf-8")
+    print("Historical research records:", len(historical))
 
     print("FULL MARKET CHART REPORT")
     print("Stocks scanned:", len(results))
