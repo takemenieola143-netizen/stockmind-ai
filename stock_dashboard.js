@@ -129,5 +129,16 @@
     }
     return {symbol,date:chart.price_date,close:chart.close,ranges:out,samples:n};
   }
-  return {chartPath,filterStocks,validChart,matchesSnapshot,predictionLabel,personalChart,chartInsights,modelEvidence,scannerReport,historicalScenarios};
+  function observation(storage,symbol,kind,now=Date.now()){
+    try {
+      const v=JSON.parse(storage.getItem("stockmind-observed:"+symbol+":"+kind)||"null");
+      if(!v||v.symbol!==symbol||v.kind!==kind||!finite(v.at)||now-v.at<0||now-v.at>24*3600000||typeof v.label!=="string")return null;
+      return v.label;
+    }catch{return null;}
+  }
+  function recordObservation(storage,symbol,kind,label,now=Date.now()){
+    if(!["financials","news"].includes(kind)||typeof symbol!=="string"||!symbol||typeof label!=="string")return;
+    try{storage.setItem("stockmind-observed:"+symbol+":"+kind,JSON.stringify({symbol,kind,label:label.slice(0,200),at:now}));}catch{}
+  }
+  return {chartPath,filterStocks,validChart,matchesSnapshot,predictionLabel,personalChart,chartInsights,modelEvidence,scannerReport,historicalScenarios,observation,recordObservation};
 });
