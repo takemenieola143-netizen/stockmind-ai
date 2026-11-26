@@ -8,6 +8,8 @@ on:
       - index.html
       - stock_dashboard.js
       - tests/stock_dashboard.test.js
+      - export_market_charts.py
+      - tests/test_export_market_charts.py
       - .github/workflows/dashboard_test.yml
   pull_request:
     branches:
@@ -16,6 +18,8 @@ on:
       - index.html
       - stock_dashboard.js
       - tests/stock_dashboard.test.js
+      - export_market_charts.py
+      - tests/test_export_market_charts.py
       - .github/workflows/dashboard_test.yml
   workflow_dispatch:
 
@@ -31,6 +35,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate chart export
+        run: python -m unittest discover -s tests -p 'test_export_market_charts.py' -v
       - name: Validate JavaScript syntax
         run: node --check stock_dashboard.js
       - name: Run dashboard tests
