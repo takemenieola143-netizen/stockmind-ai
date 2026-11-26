@@ -54,13 +54,14 @@ jobs:
         run: |
           python -m py_compile ai_engine.py
           python upgrade_scanner.py
+          python market_chart_upgrade.py
           python -m py_compile scanner.py
 
       - name: Run AI market scanner
         env:
           MAX_SYMBOLS: ${{ (github.event_name == 'workflow_dispatch' && inputs.test_v6 && inputs.max_symbols) || '0' }}
         run: |
-          rm -f market_data.json market_data.csv
+          rm -f market_data.json market_data.csv market_charts.json
           python scanner.py
 
       - name: Verify AI report
@@ -105,7 +106,7 @@ jobs:
             market_data.csv
 
       - name: Production safety check
-        if: ${{ github.event_name == 'schedule' || !inputs.test_v6 }}
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || !inputs.test_v6) }}
         run: |
           python - <<'PY'
           import json
@@ -136,8 +137,18 @@ jobs:
           print("Production safety checks passed")
           PY
 
+      # Operator must confirm permission to redistribute the historical source.
+      # Never publish the NSE recovery diagnostics through this workflow.
+      - name: Stage approved historical chart exports
+        if: ${{ github.ref == 'refs/heads/main' && vars.STOCKMIND_CHART_PUBLICATION_APPROVED == 'true' && (github.event_name == 'schedule' || !inputs.test_v6) }}
+        run: |
+          python export_market_charts.py --output chart_export_staging
+          rm -rf charts
+          mv chart_export_staging charts
+          git add -A -- charts
+
       - name: Publish StockMind AI 6.0
-        if: ${{ github.event_name == 'schedule' || !inputs.test_v6 }}
+        if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || !inputs.test_v6) }}
         run: |
           git config user.name "StockMind AI"
           git config user.email "actions@users.noreply.github.com"
