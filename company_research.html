@@ -20,7 +20,7 @@
 <p>Peer-relative scores require comparable records from a sector; use the separate research report page for that analysis. No score is fabricated from one company's ratios.</p>
 </section>
 <section><h2>News intelligence</h2><p>Search recent indexed coverage by company name. Headlines are candidate matches, not verified disclosures or sentiment predictions.</p>
-<button id="loadNews">Search latest news (14 days)</button><p id="newsStatus" role="status">Search to load news.</p><ul id="news"></ul>
+<button id="loadNews">Search latest news (14 days)</button><button id="providerNews">Fetch ticker news using your Fincrux key</button><p><a id="externalNews" href="https://news.google.com/search?q=Tata%20Consultancy%20Services" target="_blank" rel="noopener noreferrer">Open news search in a separate tab</a></p><p id="newsStatus" role="status">Search to load news.</p><ul id="news"></ul>
 <p>News discovery data: <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer">The GDELT Project</a>. Read articles at their original publishers. Index dates may differ from publication dates.</p>
 </section><p class="warn">Decision: WAIT — independent strategy validation remains required.</p>
 </main><script src="company_research.js"></script><script>
@@ -35,10 +35,11 @@ function showFinancial(payload,s){
  el("financeStatus").textContent=f.company+" | "+f.statement+" | Provider updated "+f.day+" | "+(f.status==="STALE"?"STALE — do not rely on these figures":f.note);
  el("financials").replaceChildren();
  for(const [name,n,suffix] of f.values){const d=document.createElement("div");d.className="metric";const l=document.createElement("small"),b=document.createElement("b");l.textContent=name;b.textContent=n===null?"Unavailable":suffix==="₹"?"₹"+n.toLocaleString("en-IN",{maximumFractionDigits:2}):n.toLocaleString("en-IN",{maximumFractionDigits:2})+suffix;d.append(l,b);el("financials").append(d);}
- if(!el("company").value.trim()||el("company").value==="Tata Consultancy Services"&&s!=="TCS"){el("company").value=f.company;clearNews();}
+ if(!el("company").value.trim()||el("company").value==="Tata Consultancy Services"&&s!=="TCS"){el("company").value=f.company;clearNews();syncNewsLink();}
 }
-el("symbol").addEventListener("input",()=>{revision++;clearFinancial();clearNews();el("company").value="";});
-el("company").addEventListener("input",clearNews);
+el("symbol").addEventListener("input",()=>{revision++;clearFinancial();clearNews();el("company").value="";syncNewsLink();});
+function syncNewsLink(){el("externalNews").href="https://news.google.com/search?q="+encodeURIComponent(el("company").value.trim()+" stock India");}
+el("company").addEventListener("input",()=>{clearNews();syncNewsLink();});
 el("loadFinancial").addEventListener("click",async()=>{
  const s=symbol(),key=el("key").value.trim(),version=revision,request=++financeRequest;
  if(!api.validSymbol(s)||!key||!el("consent").checked){el("financeStatus").textContent="Enter a valid NSE symbol, your API key and confirm personal-use permission.";return;}
@@ -72,6 +73,22 @@ el("loadNews").addEventListener("click",async()=>{
  }catch(e){if(request===newsRequest&&version===revision)el("newsStatus").textContent="News search unavailable. Check the full company name or use official announcements above.";}
  finally{el("loadNews").disabled=false;}
 });
+el("providerNews").addEventListener("click",async()=>{
+ const s=symbol(),key=el("key").value.trim(),request=++newsRequest,version=revision;
+ if(!api.validSymbol(s)||!key||!el("consent").checked){el("newsStatus").textContent="Enter your Fincrux key above and confirm personal-use permission.";return;}
+ el("key").value="";el("news").replaceChildren();el("providerNews").disabled=true;
+ try{
+   const u=new URL("https://api.fincrux.org/api/news/"+encodeURIComponent(s));u.searchParams.set("api_key",key);u.searchParams.set("page_size","20");
+   el("newsStatus").textContent="Requesting ticker news…";
+   const response=await fetch(u,{cache:"no-store",credentials:"omit",redirect:"error",referrerPolicy:"no-referrer",signal:AbortSignal.timeout(20000)});
+   if(!response.ok)throw Error("Provider request failed");
+   const items=api.normalizeProviderNews(await response.json(),s);
+   if(request!==newsRequest||version!==revision)return;
+   el("newsStatus").textContent=items.length?items.length+" provider-linked articles. Verify facts at original sources.":"No recent provider results; not proof of no news.";
+   for(const item of items){const li=document.createElement("li"),a=document.createElement("a"),m=document.createElement("p");a.href=item.url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=item.title;m.textContent=item.domain+" | Published "+item.seen+" | "+item.topic;li.append(a,m);el("news").append(li);}
+ }catch(e){if(request===newsRequest&&version===revision)el("newsStatus").textContent="Ticker news unavailable. Check key or use the external search and official filings.";}
+ finally{el("providerNews").disabled=false;}
+});
 const requested=new URLSearchParams(location.search).get("symbol");
-if(api.validSymbol(requested)){el("symbol").value=requested;if(requested!=="TCS")el("company").value="";}
+if(api.validSymbol(requested)){el("symbol").value=requested;if(requested!=="TCS")el("company").value="";}syncNewsLink();
 </script></body></html>
