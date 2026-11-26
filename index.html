@@ -1158,8 +1158,9 @@ style="width:100%;padding:12px;background:#1e293b;color:white;border-radius:8px"
 
 </select>
 
-<div id="c7-terms"><label><input type="checkbox" id="c7-consent"> I agree to <a href="https://tejhq.dev/data-terms" target="_blank" rel="noopener noreferrer">TejHQ data terms</a> for personal research.</label>
-<button id="c7-personal" type="button">Load selected stock chart (free)</button><small>Direct end-of-day request from your browser; no public data upload. Raw prices may jump on corporate actions.</small></div>
+<p><a id="c7-external-chart" href="https://www.tradingview.com/chart/" target="_blank" rel="noopener noreferrer" style="color:#7dd3fc">Open selected stock chart on TradingView ↗</a></p>
+<details id="c7-terms"><summary>More chart data options</summary><label><input type="checkbox" id="c7-consent"> I agree to <a href="https://tejhq.dev/data-terms" target="_blank" rel="noopener noreferrer">TejHQ data terms</a> for personal research.</label>
+<button id="c7-personal" type="button">Try personal chart provider (free)</button><small>Direct daily data request; provider may deny browser access. Raw prices may jump on corporate actions. No public data upload.</small><label for="c7-import">Import authorized TejHQ OHLCV JSON (optional)</label><input type="file" id="c7-import" accept=".json,application/json" style="width:100%"></details>
 <p><label><input type="checkbox" id="c7-levels" checked disabled> Show support and resistance</label></p>
 
 <div style="overflow-x:auto">
@@ -1412,7 +1413,7 @@ Not live intraday data.
 
   async function getJSON(path, signal) {
     const response = await fetch(path, {cache:"no-store", signal});
-    if (!response.ok) throw new Error("Report unavailable");
+    if (!response.ok) throw new Error("Report unavailable (HTTP "+response.status+")");
     return response.json();
   }
 
@@ -1450,6 +1451,7 @@ Not live intraday data.
     if (!stock) {
       el("c7-symbol").textContent = "";
       el("c7-company-link").href = "company_research.html";
+      el("c7-external-chart").href = "https://www.tradingview.com/chart/";
       el("c7-stock-summary").replaceChildren();
       el("c7-stock-predictions").replaceChildren();
       el("c7-status").textContent = "No matching stock in published report.";
@@ -1459,6 +1461,7 @@ Not live intraday data.
     el("c7-personal").disabled = false;
     el("c7-symbol").textContent = stock.symbol + " | " + money(stock.price) + " (scanner)";
     el("c7-company-link").href = "company_research.html?symbol=" + encodeURIComponent(stock.symbol);
+    el("c7-external-chart").href = "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("NSE:"+stock.symbol);
     showFields("c7-stock-summary", [
       ["Scanner price", money(stock.price)],
       ["Price date", stock.date || "Unavailable"],
@@ -1591,8 +1594,24 @@ Not live intraday data.
       if(request!==selection||signal.aborted)return;
       displayChart(helpers.personalChart(data,stock.symbol,to),stock);
     }catch(e){
-      if(request===selection&&!signal.aborted)el("c7-status").textContent="Personal chart unavailable — provider or network error. Existing chart, if any, remains historical.";
+      if(request===selection&&!signal.aborted)el("c7-status").textContent="Personal chart unavailable — provider or network error. Use the external chart link or authorized file import. Existing chart remains historical.";
     }finally{if(request===selection)el("c7-personal").disabled=false;}
+  });
+
+  el("c7-import").addEventListener("change",async()=>{
+    const input=el("c7-import"),file=input.files[0],stock=stocks.find(s=>s.symbol===el("c7-stock").value);
+    if(!file||!stock)return;
+    const request=++selection;
+    if(controller)controller.abort();
+    el("c7-personal").disabled=false;
+    try{
+      if(!el("c7-consent").checked)throw Error("Confirm data usage permission");
+      if(file.size>2000000)throw Error("File too large");
+      const payload=JSON.parse(await file.text());
+      if(request!==selection)return;
+      displayChart(helpers.personalChart(payload,stock.symbol,new Date().toISOString().slice(0,10)),stock);
+    }catch(e){if(request===selection)el("c7-status").textContent="Import unavailable: "+e.message;}
+    finally{input.value="";}
   });
 
   el("c7-range").addEventListener(
