@@ -53,7 +53,7 @@ def news_records(payload,symbol,observed):
         if not isinstance(c,dict): continue
         # Require explicit ticker relevance from provider; do not infer from headline.
         tickers=(c.get("finance") or {}).get("stockTickers") or []
-        relevant=any(isinstance(t,dict) and t.get("symbol")==symbol+".NS" for t in tickers)
+        relevant=any(t==symbol+".NS" or (isinstance(t,dict) and t.get("symbol")==symbol+".NS") for t in tickers)
         if not relevant: continue
         title=c.get("title")
         link=(c.get("canonicalUrl") or {}).get("url") or (c.get("clickThroughUrl") or {}).get("url")
@@ -91,12 +91,12 @@ def collect(symbols, ticker_factory, delay=1.5):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--personal-use",action="store_true",help="Confirm applicable data terms permit this personal research use")
+    p.add_argument("--personal-use",action="store_true",help="Confirm explicit provider permission for automated access and personal research use")
     p.add_argument("--symbols",nargs="+",required=True)
     p.add_argument("--output-dir",required=True)
     p.add_argument("--delay",type=float,default=1.5)
     args=p.parse_args()
-    if not args.personal_use: p.error("Confirm permitted personal use before requesting provider data")
+    if not args.personal_use: p.error("Confirm explicit permission for automated access before requesting provider data")
     import yfinance as yf
     symbols=list(dict.fromkeys(s.upper() for s in args.symbols))
     f,n,stats=collect(symbols,yf.Ticker,max(1.5,args.delay))
