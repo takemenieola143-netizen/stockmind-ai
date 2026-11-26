@@ -43,18 +43,24 @@ def fetch(path,params):
     data=json.loads(body)
     if not isinstance(data,dict) or not isinstance(data.get("data"),list):
         raise ValueError("Unexpected documented response envelope")
-    return data["data"]
+    return data
 
 def provider_probe():
     market=json.loads(Path("market_data.json").read_text())
     session=max(s["date"] for s in market["stocks"])
-    rows=fetch("/v1/snapshot/nse",{"date":session})
-    equities=[r for r in rows if r.get("series")=="EQ" and r.get("date")==session]
+    snapshot=fetch("/v1/snapshot/nse",{"date":session})
+    rows=snapshot["data"]
+    meta=snapshot.get("meta",{})
+    print("Snapshot row count:",len(rows),"metadata fields:",sorted(meta))
+    assert meta.get("date",meta.get("trading_date"))==session, "Snapshot session not confirmed by provider metadata"
+    equities=[r for r in rows if r.get("series")=="EQ" and r.get("date",session)==session]
     assert len(equities)>=2000, "Insufficient same-session NSE EQ snapshot rows"
     assert len({r["symbol"] for r in equities})==len(equities)
     print("Provider same-session EQ rows:",len(equities))
-    history=fetch("/v1/ohlcv/nse/RELIANCE",{"from":(date.fromisoformat(session)-timedelta(days=120)).isoformat(),"to":session})
-    assert len(history)>=51 and all(r.get("symbol")=="RELIANCE" for r in history)
+    envelope=fetch("/v1/ohlcv/nse/RELIANCE",{"from":(date.fromisoformat(session)-timedelta(days=120)).isoformat(),"to":session})
+    history=envelope["data"]
+    assert envelope.get("meta",{}).get("symbol")=="RELIANCE"
+    assert len(history)>=51 and all(r.get("symbol","RELIANCE")=="RELIANCE" for r in history)
     assert max(r["date"] for r in history)==session
     print("Provider sample history rows:",len(history))
     print("Provider probe passed; no raw data saved")
