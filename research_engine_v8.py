@@ -42,6 +42,8 @@ def fundamentals(record, peers, asof):
             continue
         sample = [num(p.get(key)) for p in peers if p.get("sector") == sector
                   and p.get("financial_company") == record.get("financial_company")
+                  and p.get("source_kind") == record.get("source_kind")
+                  and p.get("metric_basis") == record.get("metric_basis")
                   and dated_record(p, asof, 180)]
         sample = [x for x in sample if x is not None and
                   (key not in ("pe","pb") or x > 0) and
@@ -55,7 +57,9 @@ def fundamentals(record, peers, asof):
                 "metrics": values}
     return {"status": "AVAILABLE", "score": round(statistics.mean(values.values()), 2),
             "metrics": values, "source_url": record["source_url"],
-            "available_date": record["available_date"], "sector": sector}
+            "available_date": record["available_date"], "sector": sector,
+            "source_kind": record.get("source_kind", "supplied_filing"),
+            "metric_basis": record.get("metric_basis", "Supplied financial metrics")}
 
 
 def news_review(records, asof):
@@ -71,7 +75,7 @@ def news_review(records, asof):
     return {"status": "REVIEW_REQUIRED", "risk_flags": flags,
             "items": [{k:r[k] for k in ("headline","source_url","available_date")} for r in
                       sorted(items, key=lambda x:x["available_date"], reverse=True)[:10]],
-            "reason": "Read disclosures; headline sentiment is not a validated trading signal"}
+            "reason": "Review linked news or disclosures; headlines are not validated trading signals"}
 
 
 def quantile(values, q):
@@ -147,7 +151,10 @@ def backtest(candles, asof, cost_bps=20):
             "reason": "No forward validation or delisted-stock universe"}
 
 
-def integrate(market, charts, financials, news, asof, historical=None):
+def integrate(market, charts, financials, news, asof, historical=None, information_asof=None):
+    information_asof = information_asof or asof
+    if information_asof < asof or information_asof > datetime.now(timezone.utc).date() + timedelta(days=1):
+        raise ValueError("Invalid information observation date")
     historical = historical or {}
     if market.get("completed_sessions_only") is not True:
         raise ValueError("Completed session report required")
@@ -156,8 +163,8 @@ def integrate(market, charts, financials, news, asof, historical=None):
     for s in market["stocks"]:
         symbol = s["symbol"]
         c = charts.get(symbol, {})
-        f = fundamentals(financials.get(symbol), peers, asof)
-        n = news_review(news.get(symbol, []), asof)
+        f = fundamentals(financials.get(symbol), peers, information_asof)
+        n = news_review(news.get(symbol, []), information_asof)
         fresh = (s.get("date") == asof.isoformat() == c.get("price_date")
                  and c.get("symbol") == symbol and c.get("freshness_verified") is True
                  and num(s.get("price")) is not None and num(c.get("close")) is not None
@@ -191,7 +198,7 @@ def integrate(market, charts, financials, news, asof, historical=None):
                         "research_rank":rank,"decision":"WAIT","blocks":blocks})
     records.sort(key=lambda r:(r["research_rank"] is not None,r["research_rank"] or 0),reverse=True)
     return {"version":"8.0-preview","as_of":asof.isoformat(),
-            "generated":datetime.now(timezone.utc).isoformat(),
+            "generated":datetime.now(timezone.utc).isoformat(), "information_as_of":information_asof.isoformat(),
             "mode":"Research only; no trade signals","stocks":records}
 
 
@@ -204,13 +211,15 @@ if __name__ == "__main__":
     p.add_argument("--financials")
     p.add_argument("--news")
     p.add_argument("--historical")
+    p.add_argument("--information-as-of",help="Observation date for current financial/news snapshots, separate from price session")
     p.add_argument("--output",default="research_v8.json")
     a=p.parse_args()
     load=lambda x:json.loads(Path(x).read_text(encoding="utf-8"))
     report=integrate(load(a.market),load(a.charts)["charts"],
                      load(a.financials) if a.financials else {},
                      load(a.news) if a.news else {},date.fromisoformat(a.as_of),
-                     load(a.historical) if a.historical else {})
+                     load(a.historical) if a.historical else {},
+                     date.fromisoformat(a.information_as_of) if a.information_as_of else None)
     Path(a.output).write_text(json.dumps(report,allow_nan=False,separators=(",",":")),encoding="utf-8")
     print("8.0 research records:",len(report["stocks"]))
     print("Research ranks available:",sum(x["research_rank"] is not None for x in report["stocks"]))
