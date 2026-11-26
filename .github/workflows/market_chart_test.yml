@@ -2,6 +2,9 @@
 name: StockMind AI 7.1 Market Chart Test
 
 on:
+  push:
+    branches: [stockmind-7-2-dashboard]
+    paths: ['.github/workflows/market_chart_test.yml']
   workflow_dispatch:
     inputs:
       max_symbols:
@@ -48,7 +51,7 @@ jobs:
 
       - name: Scan stocks
         env:
-          MAX_SYMBOLS: ${{ inputs.max_symbols }}
+          MAX_SYMBOLS: ${{ inputs.max_symbols || '100' }}
         run: |
           rm -f market_data.json market_charts.json
           python scanner.py
@@ -132,7 +135,19 @@ jobs:
           PY
           
 
+      - name: Validate dashboard chart export
+        run: |
+          python export_market_charts.py --output preview_charts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m = json.loads(Path("preview_charts/manifest.json").read_text())
+          assert len(list(Path("preview_charts").glob("*.json"))) == m["charts_available"] + 1
+          print("Per-stock dashboard files verified:", m["charts_available"])
+          PY
+
       - name: Test market-wide candle recovery
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           python - <<'PY'
           import json
