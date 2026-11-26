@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StockMind AI 8.0 Research Preview</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1120;color:#e2e8f0;font:16px system-ui}
+main{max-width:900px;margin:auto;padding:16px}h1,h2{color:#6ee7b7}a{color:#7dd3fc}
+section{background:#172235;border:1px solid #334155;border-radius:12px;padding:14px;margin:14px 0}
+input,select{width:100%;font:inherit;padding:10px;margin:6px 0;background:#0b1120;color:inherit;border:1px solid #475569;border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.metric{background:#0b1120;padding:12px;border-radius:8px;overflow-wrap:anywhere}
+.metric b{display:block;margin-top:5px}small,p{color:#b5c3d6}.warn{color:#fbbf24}
+svg{width:100%;max-width:600px;height:auto;background:#0b1120;border-radius:8px}
+li{margin:6px 0;overflow-wrap:anywhere}
+</style></head><body><main>
+<a href="index.html">← StockMind dashboard</a>
+<h1>StockMind AI 8.0</h1><p>Research preview · daily data · no automated orders</p>
+<section>
+<h2>Load a local research report</h2>
+<p>Choose a research_v8.json file you are permitted to use. It stays in this browser; no upload to a server.</p>
+<label for="file">Research report</label><input id="file" type="file" accept=".json,application/json">
+<p id="status" role="status">No report loaded. Missing data is never estimated.</p>
+<label for="search">Search symbol</label><input id="search" type="search" placeholder="RELIANCE, TCS…" disabled>
+<label for="stock">Choose stock</label><select id="stock" disabled></select>
+</section>
+<section id="results" hidden>
+<h2 id="symbol"></h2><p class="warn" id="decision"></p>
+<div class="grid" id="summary"></div>
+<h2>Fundamentals</h2><div class="grid" id="fund"></div><p id="source"></p>
+<h2>AI direction estimates</h2><div class="grid" id="model"></div>
+<h2>Historical price scenarios</h2>
+<p>10th, 50th and 90th percentiles of non-overlapping historical returns applied to the reference close. Not calibrated future price predictions or guaranteed confidence intervals.</p>
+<svg id="ranges" viewBox="0 0 420 235" role="img" aria-label="Historical scenario price ranges by trading-day horizon"></svg>
+<div class="grid" id="rangeText"></div>
+<h2>Historical strategy test</h2><div class="grid" id="backtest"></div>
+<p>Fixed rule; chronological holdout, next-open execution and same-day exit. Not portfolio-level, forward-tested or adjusted for survivorship bias.</p>
+<h2>Recent disclosures</h2><p id="newsStatus"></p><ul id="news"></ul>
+<h2>Decision blockers</h2><ul id="blocks"></ul>
+</section></main>
+<script>
+"use strict";
+const el=id=>document.getElementById(id);
+let records=[];
+const finite=n=>typeof n==="number"&&Number.isFinite(n);
+const fmt=(v,s="")=>finite(v)?v.toLocaleString("en-IN",{maximumFractionDigits:2})+s:"Unavailable";
+const money=v=>finite(v)?"₹"+fmt(v):"Unavailable";
+function fields(id, rows) {
+ const target=el(id);target.replaceChildren();
+ for(const [label,value] of rows){const d=document.createElement("div");d.className="metric";
+ const l=document.createElement("small"),b=document.createElement("b");l.textContent=label;b.textContent=String(value??"Unavailable");d.append(l,b);target.append(d);}
+}
+function list(id,items){const t=el(id);t.replaceChildren();for(const s of items){const l=document.createElement("li");l.textContent=String(s);t.append(l);}}
+function safeLink(url,label){try{const u=new URL(url);if(u.protocol!=="https:")return null;const a=document.createElement("a");a.href=u.href;a.textContent=label;a.target="_blank";a.rel="noopener noreferrer";return a;}catch{return null;}}
+function drawRanges(rows){
+ const root=el("ranges");root.replaceChildren();
+ const valid=rows.filter(([,v])=>v&&v.status==="HISTORICAL_SCENARIO"&&[v.low,v.median,v.high].every(finite)&&v.low<=v.median&&v.median<=v.high);
+ function svg(tag,attrs,txt){const n=document.createElementNS("http://www.w3.org/2000/svg",tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(txt!==undefined)n.textContent=txt;root.append(n);}
+ if(!valid.length){svg("text",{x:20,y:35,fill:"#94a3b8","font-size":13},"Insufficient historical evidence");return;}
+ const min=Math.min(...valid.map(([,v])=>v.low)),max=Math.max(...valid.map(([,v])=>v.high));
+ const x=v=>65+(v-min)/Math.max(max-min,.01)*320;
+ for(let i=0;i<5;i++){const p=min+(max-min)*i/4;svg("line",{x1:x(p),x2:x(p),y1:20,y2:195,stroke:"#334155"});svg("text",{x:x(p),y:215,fill:"#94a3b8","font-size":9,"text-anchor":"middle"},fmt(p));}
+ valid.forEach(([h,v],i)=>{const y=35+i*45;svg("text",{x:12,y:y+4,fill:"#e2e8f0","font-size":13},h+"D");svg("line",{x1:x(v.low),x2:x(v.high),y1:y,y2:y,stroke:"#60a5fa","stroke-width":6,"stroke-linecap":"round"});svg("circle",{cx:x(v.median),cy:y,r:5,fill:"#6ee7b7"});});
+}
+function render(){
+ const s=records.find(r=>r.symbol===el("stock").value);el("results").hidden=!s;if(!s)return;
+ el("symbol").textContent=s.symbol;el("decision").textContent="WAIT — research only";
+ const f=s.fundamental||{},n=s.news||{},bt=s.backtest||{};
+ fields("summary",[["Report session",s.date],["Research rank",fmt(s.research_rank,"/100")],["Fundamental score",fmt(f.score,"/100")]]);
+ fields("fund",[["Status",f.status||"UNKNOWN"],["Sector",f.sector],...Object.entries(f.metrics||{}).map(([k,v])=>[k.replaceAll("_"," ")+" peer percentile",fmt(v)])]);
+ el("source").textContent=f.reason||("Financial information available "+(f.available_date||"unknown")+". ");
+ const a=safeLink(f.source_url,"View source");if(a)el("source").append(a);
+ fields("model",[1,5,10,20].map(h=>[h+" trading days: up probability",fmt((s.probabilities||{})[h],"%")]));
+ const ranges=[1,5,10,20].map(h=>[h,(s.historical_ranges||{})[h]]);
+ drawRanges(ranges);
+ fields("rangeText",ranges.map(([h,v])=>[h+"D scenario",v?.status==="HISTORICAL_SCENARIO"?money(v.low)+" – "+money(v.high)+" ("+fmt(v.samples)+" samples)":"Unavailable"]));
+ fields("backtest",[["Status",bt.status],["Net historical return",fmt(bt.return_pct,"%")],["Daily-entry benchmark",fmt(bt.daily_entry_benchmark_pct,"%")],["Max drawdown",fmt(bt.max_drawdown_pct,"%")],["Trades",fmt(bt.trades)],["Round-trip cost",fmt(bt.cost_bps_round_trip," bps")],["Holdout start",bt.holdout_start]]);
+ el("newsStatus").textContent=n.reason||n.status||"UNKNOWN";el("news").replaceChildren();
+ for(const item of (Array.isArray(n.items)?n.items:[])){const li=document.createElement("li");li.textContent=String(item.available_date||"")+" — ";const link=safeLink(item.source_url,String(item.headline||"Disclosure"));if(link)li.append(link);else li.append(String(item.headline||"Disclosure"));el("news").append(li);}
+ list("blocks",Array.isArray(s.blocks)?s.blocks:["No validated decision"]);
+}
+function options(){
+ const q=el("search").value.trim().toUpperCase(),sel=el("stock"),old=sel.value;sel.replaceChildren();
+ for(const s of records.filter(r=>r.symbol.toUpperCase().includes(q))){const o=document.createElement("option");o.value=s.symbol;o.textContent=s.symbol;sel.append(o);}
+ if([...sel.options].some(o=>o.value===old))sel.value=old;sel.disabled=!sel.options.length;render();
+}
+el("file").addEventListener("change",async()=>{
+ records=[];el("results").hidden=true;el("search").disabled=true;el("stock").disabled=true;el("stock").replaceChildren();
+ try{
+ const f=el("file").files[0];if(!f)return;if(f.size>30*1024*1024)throw Error("File too large");
+ const data=JSON.parse(await f.text());if(data.version!=="8.0-preview"||!Array.isArray(data.stocks))throw Error("Invalid research report");
+ records=data.stocks.filter(s=>s&&typeof s.symbol==="string"&&s.decision==="WAIT");
+ el("status").textContent=records.length+" research records · as of "+String(data.as_of||"unknown");
+ el("search").disabled=false;options();
+ }catch(e){el("status").textContent="Report unavailable: "+e.message;}
+});
+el("search").addEventListener("input",options);el("stock").addEventListener("change",render);
+</script></body></html>
