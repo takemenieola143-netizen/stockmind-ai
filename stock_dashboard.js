@@ -114,5 +114,20 @@
         blocks:["Published scanner snapshot only; price scenarios require historical candles","Financial and news evidence not part of automated model","Forward profitability not verified"]};
     });
   }
-  return {chartPath,filterStocks,validChart,matchesSnapshot,predictionLabel,personalChart,chartInsights,modelEvidence,scannerReport};
+  function historicalScenarios(payload,symbol,to){
+    const chart=personalChart(payload,symbol,to);
+    const c=payload.data.filter(x=>x&&(x.series===undefined||x.series==="EQ")).sort((a,b)=>a.date.localeCompare(b.date));
+    if(c.length>1250||c.some(x=>!finite(x.close)||x.close<=0||!finite(x.open)||!finite(x.high)||!finite(x.low)||x.low<=0||x.low>Math.min(x.open,x.close)||x.high<Math.max(x.open,x.close)))throw Error("Invalid historical prices");
+    const prices=c.map(x=>x.close),n=prices.length;
+    const q=(a,p)=>{const s=[...a].sort((x,y)=>x-y),i=(s.length-1)*p;return s[Math.floor(i)]+(s[Math.ceil(i)]-s[Math.floor(i)])*(i-Math.floor(i));};
+    const out={};
+    for(const h of [1,5,10,20]){
+      const a=[];for(let i=n-1;i>=h;i-=h)a.push(prices[i]/prices[i-h]-1);
+      if(a.length<20){out[h]={status:"INSUFFICIENT_HISTORY",samples:a.length};continue;}
+      const p=prices[n-1];
+      out[h]={status:"HISTORICAL_SCENARIO",samples:a.length,low:p*(1+q(a,.1)),median:p*(1+q(a,.5)),high:p*(1+q(a,.9)),anchor_date:chart.price_date};
+    }
+    return {symbol,date:chart.price_date,close:chart.close,ranges:out,samples:n};
+  }
+  return {chartPath,filterStocks,validChart,matchesSnapshot,predictionLabel,personalChart,chartInsights,modelEvidence,scannerReport,historicalScenarios};
 });
