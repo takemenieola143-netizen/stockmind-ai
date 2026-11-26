@@ -69,8 +69,9 @@ function render(){
  el("symbol").textContent=s.symbol;el("decision").textContent="WAIT — research only";
  el("report-company").href="company_research.html?symbol="+encodeURIComponent(s.symbol);el("report-chart").href="index.html?symbol="+encodeURIComponent(s.symbol)+"#chart-v7";
  const f=s.fundamental||{},n=s.news||{},bt=s.backtest||{};
+ const observed=(kind)=>{try{return StockMindDashboard.observation(sessionStorage,s.symbol,kind);}catch{return null;}};
  fields("summary",[["Report session",s.date],["Scanner price",money(s.price)],["Technical score",fmt(s.technical_score,"/100")],["Research rank",fmt(s.research_rank,"/100")]]);
- fields("fund",[["Status",f.status||"UNKNOWN"],["Sector",f.sector],["Source type",f.source_kind],["Metric basis",f.metric_basis],...Object.entries(f.metrics||{}).map(([k,v])=>[k.replaceAll("_"," ")+" peer percentile",fmt(v)])]);
+ fields("fund",[["Status",observed("financials")||f.status||"UNKNOWN"],...(imported?[["Sector",f.sector],["Source type",f.source_kind],["Metric basis",f.metric_basis]]:[]),...Object.entries(f.metrics||{}).map(([k,v])=>[k.replaceAll("_"," ")+" peer percentile",fmt(v)])]);
  el("source").textContent=f.reason||("Financial information available "+(f.available_date||"unknown")+". ");
  const a=safeLink(f.source_url,"View source");if(a)el("source").append(a);
  fields("model",[1,5,10,20].map(h=>[h+" trading days",finite((s.probabilities||{})[h])?fmt(s.probabilities[h],"%")+" up probability":s.model_evidence?.[h]?.reason||"Not validated"]));
@@ -83,11 +84,12 @@ function render(){
  fields("rangeValidation",[1,5,10,20].map(h=>{const v=(s.range_validation||{})[h];return [h+"D holdout",v?.status==="HISTORICAL_DIAGNOSTIC"?fmt(v.coverage_pct,"%")+" coverage | median error "+fmt(v.median_mae_pct,"%")+" vs baseline "+fmt(v.no_change_mae_pct,"%")+" | "+fmt(v.samples)+" samples":"Insufficient evidence"];}));
  fields("backtest",[["Status",bt.status],["Net historical return",fmt(bt.return_pct,"%")],["Historical benchmark",fmt(bt.daily_entry_benchmark_pct??bt.benchmark_return_pct,"%")],["Max drawdown",fmt(bt.max_drawdown_pct,"%")],["Trades",fmt(bt.trades)],["Round-trip cost",fmt(bt.cost_bps_round_trip," bps")],["Holdout start",bt.holdout_start]]);
  el("bt-note").textContent=bt.status==="LEGACY_SCANNER"?"Published scanner backtest (legacy methodology, not cost-adjusted or forward-validated).":"Imported historical research; fixed-rule holdout, not a portfolio or forward test.";
- el("newsStatus").textContent=n.reason||n.status||"UNKNOWN";el("news").replaceChildren();
+ el("newsStatus").textContent=observed("news")||n.reason||n.status||"UNKNOWN";el("news").replaceChildren();
  for(const item of (Array.isArray(n.items)?n.items:[])){const li=document.createElement("li");li.textContent=String(item.available_date||"")+" — ";const link=safeLink(item.source_url,String(item.headline||"Disclosure"));if(link)li.append(link);else li.append(String(item.headline||"Disclosure"));el("news").append(li);}
  list("blocks",Array.isArray(s.blocks)?s.blocks:["No validated decision"]);
 }
 function options(){
+ historyId++;el("history-load").disabled=false;
  const q=el("search").value.trim().toUpperCase(),sel=el("stock"),old=sel.value;sel.replaceChildren();
  for(const s of records.filter(r=>r.symbol.toUpperCase().includes(q))){const o=document.createElement("option");o.value=s.symbol;o.textContent=s.symbol;sel.append(o);}
  if([...sel.options].some(o=>o.value===old))sel.value=old;sel.disabled=!sel.options.length;render();
